@@ -1,0 +1,2207 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Blackjack Advantage Engine</title>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;900&family=DM+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+tailwind.config={theme:{extend:{colors:{felt:'#0d4a2e','felt-dark':'#082a1a',gold:'#c9a84c','gold-light':'#e5cc7a','gold-dark':'#8a7233',casino:{black:'#080c08',dark:'#0f1f14',green:'#0d4a2e',cream:'#e2ddd0',muted:'#6b7a6e',border:'#1a3322',red:'#ef4444',panel:'#111e15'}},fontFamily:{display:['Playfair Display','serif'],sans:['DM Sans','sans-serif']}}}}
+</script>
+<style>
+*{box-sizing:border-box}
+body{background:#080c08;overflow-x:hidden}
+.bg-atmo{position:fixed;inset:0;pointer-events:none;background:radial-gradient(ellipse at 30% 20%,rgba(13,74,46,.12) 0%,transparent 60%),radial-gradient(ellipse at 70% 80%,rgba(13,74,46,.08) 0%,transparent 50%),radial-gradient(ellipse at 50% 50%,rgba(201,168,76,.03) 0%,transparent 40%)}
+.glow-gold{box-shadow:0 0 20px rgba(201,168,76,.15),inset 0 1px 0 rgba(201,168,76,.1)}
+.glow-green{box-shadow:0 0 25px rgba(74,222,128,.2)}
+.glow-red{box-shadow:0 0 25px rgba(239,68,68,.2)}
+.card-rank{transition:all .15s ease;cursor:pointer;user-select:none;position:relative;overflow:hidden}
+.card-rank:hover:not(.disabled){transform:translateY(-2px);box-shadow:0 4px 12px rgba(0,0,0,.4)}
+.card-rank:active:not(.disabled){transform:scale(.95)}
+.card-rank.disabled{opacity:.3;cursor:not-allowed;pointer-events:none}
+.card-rank .fill-bar{transition:width .3s ease}
+.slot-card{transition:all .2s ease;cursor:pointer}
+.slot-card:hover{border-color:rgba(201,168,76,.5)}
+.slot-card.active{border-color:#c9a84c;box-shadow:0 0 12px rgba(201,168,76,.3)}
+.picker-btn{transition:all .12s ease;cursor:pointer}
+.picker-btn:hover{background:rgba(201,168,76,.2);transform:scale(1.08)}
+.picker-btn.selected{background:rgba(201,168,76,.3);border-color:#c9a84c}
+.action-badge{animation:fadeSlideIn .3s ease}
+@keyframes fadeSlideIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+@keyframes pulse-glow{0%,100%{box-shadow:0 0 15px rgba(201,168,76,.2)}50%{box-shadow:0 0 30px rgba(201,168,76,.4)}}
+.pulse-border{animation:pulse-glow 2s ease-in-out infinite}
+.edge-bar-fill{transition:all .6s cubic-bezier(.4,0,.2,1)}
+.prob-bar{transition:width .4s ease}
+.tab-btn{transition:all .15s ease}
+.tab-btn.active{background:rgba(201,168,76,.15);color:#c9a84c;border-color:rgba(201,168,76,.3)}
+.charts-grid td,.charts-grid th{padding:4px 6px;text-align:center;font-size:12px;border:1px solid rgba(26,51,34,.6)}
+.charts-grid th{background:rgba(201,168,76,.1);color:#c9a84c;font-weight:600}
+::-webkit-scrollbar{width:6px;height:6px}
+::-webkit-scrollbar-track{background:#0a0e0a}
+::-webkit-scrollbar-thumb{background:#1a3322;border-radius:3px}
+::-webkit-scrollbar-thumb:hover{background:#2a5035}
+@media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+</head>
+<body class="min-h-screen font-sans text-casino-cream">
+<div class="bg-atmo"></div>
+
+<div class="relative z-10 max-w-7xl mx-auto px-3 sm:px-6 py-4 sm:py-6">
+
+<!-- Header -->
+<header class="text-center mb-6 sm:mb-8">
+  <h1 class="font-display text-3xl sm:text-4xl md:text-5xl font-black text-gold tracking-tight leading-tight">
+    Blackjack Advantage Engine
+  </h1>
+  <p class="text-casino-muted mt-1.5 text-xs sm:text-sm tracking-[.25em] uppercase">
+    Hi-Lo Count System &middot; Optimal Strategy &middot; Kelly Bet Sizing
+  </p>
+</header>
+
+<!-- Count Dashboard -->
+<section class="grid grid-cols-2 lg:grid-cols-5 gap-3 mb-6" id="dash">
+  <div class="bg-casino-panel border border-casino-border rounded-xl p-3 sm:p-4 glow-gold">
+    <div class="text-casino-muted text-[10px] uppercase tracking-widest mb-1">Running Count</div>
+    <div class="text-2xl sm:text-3xl font-bold tabular-nums" id="rc-display">0</div>
+  </div>
+  <div class="bg-casino-panel border border-casino-border rounded-xl p-3 sm:p-4">
+    <div class="text-casino-muted text-[10px] uppercase tracking-widest mb-1">True Count</div>
+    <div class="text-2xl sm:text-3xl font-bold tabular-nums" id="tc-display">0.0</div>
+  </div>
+  <div class="bg-casino-panel border border-casino-border rounded-xl p-3 sm:p-4">
+    <div class="text-casino-muted text-[10px] uppercase tracking-widest mb-1">Decks Remaining</div>
+    <div class="text-2xl sm:text-3xl font-bold tabular-nums" id="dr-display">6.0</div>
+  </div>
+  <div class="bg-casino-panel border border-casino-border rounded-xl p-3 sm:p-4">
+    <div class="text-casino-muted text-[10px] uppercase tracking-widest mb-1">Player Edge</div>
+    <div class="text-2xl sm:text-3xl font-bold tabular-nums" id="edge-display">-0.45%</div>
+  </div>
+  <div class="col-span-2 lg:col-span-1 bg-casino-panel border border-casino-border rounded-xl p-3 sm:p-4">
+    <div class="text-casino-muted text-[10px] uppercase tracking-widest mb-1">Penetration</div>
+    <div class="text-2xl sm:text-3xl font-bold tabular-nums" id="pen-display">0%</div>
+    <div class="h-1.5 bg-gray-800 rounded-full mt-2 overflow-hidden">
+      <div class="h-full bg-gold rounded-full transition-all duration-300" id="pen-bar" style="width:0%"></div>
+    </div>
+  </div>
+</section>
+
+<!-- Edge Meter -->
+<div class="bg-casino-panel border border-casino-border rounded-xl p-4 mb-6">
+  <div class="flex justify-between text-[10px] text-casino-muted uppercase tracking-widest mb-2">
+    <span>House Edge</span><span>Neutral</span><span>Player Edge</span>
+  </div>
+  <div class="h-4 bg-gray-800/80 rounded-full overflow-hidden relative">
+    <div class="absolute inset-y-0 left-1/2 w-px bg-casino-muted/40 z-10"></div>
+    <div class="edge-bar-fill h-full rounded-full absolute top-0" id="edge-bar" style="left:50%;width:0%;background:#ef4444"></div>
+  </div>
+  <div class="flex justify-between text-[9px] text-casino-muted/50 mt-1 tabular-nums">
+    <span>-2%</span><span>-1%</span><span>0%</span><span>+1%</span><span>+2%</span>
+  </div>
+</div>
+
+<!-- Main Grid -->
+<div class="grid grid-cols-1 lg:grid-cols-5 gap-5 mb-6">
+
+  <!-- Card Tracker -->
+  <section class="lg:col-span-2 bg-casino-panel border border-casino-border rounded-xl p-4">
+    <div class="flex items-center justify-between mb-3">
+      <h2 class="font-display text-lg text-gold">Card Tracker</h2>
+      <div class="flex gap-2">
+        <button onclick="undoLast()" class="text-xs px-2.5 py-1 rounded-lg bg-casino-dark border border-casino-border text-casino-muted hover:text-casino-cream transition-colors" title="Undo last card">
+          <i class="fa-solid fa-rotate-left mr-1"></i>Undo
+        </button>
+        <button onclick="resetShoe()" class="text-xs px-2.5 py-1 rounded-lg bg-casino-dark border border-casino-border text-casino-muted hover:text-casino-cream transition-colors">
+          <i class="fa-solid fa-arrows-rotate mr-1"></i>New Shoe
+        </button>
+      </div>
+    </div>
+
+    <!-- Quick Input -->
+    <div class="mb-3">
+      <input type="text" id="quick-input" placeholder="Quick add: A235TQK..."
+        class="w-full bg-casino-dark border border-casino-border rounded-lg px-3 py-2 text-sm text-casino-cream placeholder-casino-muted/50 focus:outline-none focus:border-gold/50 transition-colors font-mono tracking-wider">
+      <div class="text-[9px] text-casino-muted/40 mt-1">A=Ace, 2-9, T=10, J, Q, K &middot; Left-click card to add, right-click to remove</div>
+    </div>
+
+    <!-- Card Grid -->
+    <div class="grid grid-cols-7 gap-1.5 sm:gap-2" id="card-grid"></div>
+
+    <!-- Count Legend -->
+    <div class="flex items-center justify-center gap-4 mt-3 text-[10px] text-casino-muted">
+      <span><span class="inline-block w-2 h-2 rounded-full bg-emerald-500 mr-1"></span>+1 (2-6)</span>
+      <span><span class="inline-block w-2 h-2 rounded-full bg-gray-500 mr-1"></span>0 (7-9)</span>
+      <span><span class="inline-block w-2 h-2 rounded-full bg-red-400 mr-1"></span>-1 (10-A)</span>
+    </div>
+  </section>
+
+  <!-- Hand Advisor -->
+  <section class="lg:col-span-3 space-y-4">
+    <!-- Mode Toggle -->
+    <div class="bg-casino-panel border border-casino-border rounded-xl p-4">
+      <div class="flex items-center gap-2 mb-3">
+        <h2 class="font-display text-lg text-gold">Hand Advisor</h2>
+        <div class="flex ml-auto bg-casino-dark rounded-lg border border-casino-border overflow-hidden">
+          <button class="tab-btn active text-xs px-3 py-1.5 border-r border-casino-border" data-mode="card" onclick="setMode('card')">Cards</button>
+          <button class="tab-btn text-xs px-3 py-1.5" data-mode="total" onclick="setMode('total')">Total</button>
+        </div>
+      </div>
+
+      <!-- Card Mode -->
+      <div id="card-mode">
+        <div class="flex flex-wrap gap-3 mb-3">
+          <div class="flex-1 min-w-[100px]">
+            <div class="text-[10px] text-casino-muted uppercase tracking-widest mb-1">Your Hand</div>
+            <div class="flex gap-2">
+              <div class="slot-card w-14 h-20 bg-casino-dark border-2 border-casino-border rounded-lg flex items-center justify-center text-xl font-bold" id="slot-p1" onclick="selectSlot('p1')">?</div>
+              <div class="slot-card w-14 h-20 bg-casino-dark border-2 border-casino-border rounded-lg flex items-center justify-center text-xl font-bold" id="slot-p2" onclick="selectSlot('p2')">?</div>
+            </div>
+          </div>
+          <div class="min-w-[70px]">
+            <div class="text-[10px] text-casino-muted uppercase tracking-widest mb-1">Dealer</div>
+            <div class="slot-card w-14 h-20 bg-casino-dark border-2 border-casino-border rounded-lg flex items-center justify-center text-xl font-bold" id="slot-d" onclick="selectSlot('d')">?</div>
+          </div>
+        </div>
+        <div class="text-[10px] text-casino-muted uppercase tracking-widest mb-1.5">Select a slot above, then pick a card:</div>
+        <div class="grid grid-cols-13 gap-1" id="card-picker"></div>
+      </div>
+
+      <!-- Total Mode -->
+      <div id="total-mode" class="hidden">
+        <div class="grid grid-cols-2 gap-4 mb-3">
+          <div>
+            <label class="text-[10px] text-casino-muted uppercase tracking-widest mb-1 block">Your Total</label>
+            <input type="number" min="4" max="21" id="total-input" value="16"
+              class="w-full bg-casino-dark border border-casino-border rounded-lg px-3 py-2.5 text-xl font-bold text-casino-cream focus:outline-none focus:border-gold/50 transition-colors tabular-nums">
+          </div>
+          <div>
+            <label class="text-[10px] text-casino-muted uppercase tracking-widest mb-1 block">Dealer Upcard</label>
+            <select id="dealer-select" class="w-full bg-casino-dark border border-casino-border rounded-lg px-3 py-2.5 text-xl font-bold text-casino-cream focus:outline-none focus:border-gold/50 transition-colors appearance-none cursor-pointer">
+              <option value="2">2</option><option value="3">3</option><option value="4">4</option>
+              <option value="5">5</option><option value="6">6</option><option value="7">7</option>
+              <option value="8">8</option><option value="9">9</option><option value="10">10</option>
+              <option value="1">Ace</option>
+            </select>
+          </div>
+        </div>
+        <label class="flex items-center gap-2 cursor-pointer">
+          <input type="checkbox" id="soft-check" class="w-4 h-4 rounded accent-gold">
+          <span class="text-sm text-casino-muted">Soft hand (contains Ace counted as 11)</span>
+        </label>
+      </div>
+
+      <button onclick="calculateAdvice()" class="mt-4 w-full py-3 bg-gradient-to-r from-gold-dark to-gold text-casino-black font-bold rounded-xl hover:from-gold hover:to-gold-light transition-all text-sm tracking-wider uppercase">
+        <i class="fa-solid fa-calculator mr-2"></i>Calculate Optimal Play
+      </button>
+    </div>
+
+    <!-- Results -->
+    <div id="results-panel" class="hidden space-y-4">
+      <!-- Main Recommendation -->
+      <div class="bg-casino-panel border-2 rounded-xl p-5 text-center" id="rec-card">
+        <div class="text-[10px] text-casino-muted uppercase tracking-widest mb-2">Optimal Play</div>
+        <div class="text-4xl sm:text-5xl font-black mb-1" id="rec-action">STAND</div>
+        <div class="text-sm text-casino-muted" id="rec-ev">EV: +0.00%</div>
+      </div>
+
+      <!-- Deviation Alert -->
+      <div class="hidden bg-casino-panel border border-gold/30 rounded-xl p-4" id="deviation-alert">
+        <div class="flex items-start gap-3">
+          <i class="fa-solid fa-bolt text-gold mt-0.5"></i>
+          <div>
+            <div class="text-xs font-bold text-gold uppercase tracking-wider">Count Deviation Active</div>
+            <div class="text-sm text-casino-cream mt-1" id="deviation-text"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Probabilities -->
+      <div class="bg-casino-panel border border-casino-border rounded-xl p-4">
+        <div class="text-[10px] text-casino-muted uppercase tracking-widest mb-3">Win Probability (Simulation)</div>
+        <div class="space-y-2.5">
+          <div>
+            <div class="flex justify-between text-xs mb-0.5"><span class="text-emerald-400">Win</span><span class="tabular-nums" id="prob-win">0%</span></div>
+            <div class="h-2.5 bg-gray-800 rounded-full overflow-hidden"><div class="prob-bar h-full bg-emerald-500 rounded-full" id="bar-win" style="width:0%"></div></div>
+          </div>
+          <div>
+            <div class="flex justify-between text-xs mb-0.5"><span class="text-red-400">Lose</span><span class="tabular-nums" id="prob-lose">0%</span></div>
+            <div class="h-2.5 bg-gray-800 rounded-full overflow-hidden"><div class="prob-bar h-full bg-red-500 rounded-full" id="bar-lose" style="width:0%"></div></div>
+          </div>
+          <div>
+            <div class="flex justify-between text-xs mb-0.5"><span class="text-slate-400">Push</span><span class="tabular-nums" id="prob-push">0%</span></div>
+            <div class="h-2.5 bg-gray-800 rounded-full overflow-hidden"><div class="prob-bar h-full bg-slate-500 rounded-full" id="bar-push" style="width:0%"></div></div>
+          </div>
+        </div>
+        <div class="text-[9px] text-casino-muted/40 mt-2" id="sim-info"></div>
+      </div>
+
+      <!-- Action Comparison -->
+      <div class="bg-casino-panel border border-casino-border rounded-xl p-4">
+        <div class="text-[10px] text-casino-muted uppercase tracking-widest mb-3">Action Comparison (EV per unit)</div>
+        <div class="space-y-2" id="ev-comparison"></div>
+      </div>
+
+      <!-- Bet Sizing -->
+      <div class="bg-casino-panel border border-casino-border rounded-xl p-4">
+        <div class="text-[10px] text-casino-muted uppercase tracking-widest mb-3">Kelly Criterion Bet Sizing</div>
+        <div class="grid grid-cols-3 gap-3">
+          <div class="text-center">
+            <div class="text-[10px] text-casino-muted mb-1">1/4 Kelly</div>
+            <div class="text-lg font-bold text-gold tabular-nums" id="bet-quarter">$0</div>
+          </div>
+          <div class="text-center">
+            <div class="text-[10px] text-casino-muted mb-1">1/2 Kelly</div>
+            <div class="text-lg font-bold text-gold tabular-nums" id="bet-half">$0</div>
+          </div>
+          <div class="text-center">
+            <div class="text-[10px] text-casino-muted mb-1">Full Kelly</div>
+            <div class="text-lg font-bold text-gold tabular-nums" id="bet-full">$0</div>
+          </div>
+        </div>
+        <div class="text-[9px] text-casino-muted/40 mt-2">Based on bankroll: $<span id="bankroll-display">1000</span></div>
+      </div>
+
+      <!-- Insurance -->
+      <div class="hidden bg-casino-panel border border-casino-border rounded-xl p-4" id="insurance-panel">
+        <div class="flex items-center gap-3">
+          <i class="fa-solid fa-shield-halved text-lg" id="insurance-icon"></i>
+          <div>
+            <div class="font-bold text-sm" id="insurance-text">Insurance</div>
+            <div class="text-xs text-casino-muted" id="insurance-detail"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+</div>
+
+<!-- Rules Config -->
+<section class="bg-casino-panel border border-casino-border rounded-xl p-4 mb-6">
+  <h2 class="font-display text-lg text-gold mb-3">Game Rules</h2>
+  <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+    <div>
+      <label class="text-[10px] text-casino-muted uppercase tracking-widest mb-1 block">Decks</label>
+      <select id="cfg-decks" onchange="onRulesChange()" class="w-full bg-casino-dark border border-casino-border rounded-lg px-3 py-2 text-sm text-casino-cream focus:outline-none focus:border-gold/50 appearance-none cursor-pointer">
+        <option value="1">1 Deck</option><option value="2">2 Decks</option><option value="4">4 Decks</option>
+        <option value="6" selected>6 Decks</option><option value="8">8 Decks</option>
+      </select>
+    </div>
+    <div>
+      <label class="text-[10px] text-casino-muted uppercase tracking-widest mb-1 block">Soft 17</label>
+      <select id="cfg-s17" onchange="onRulesChange()" class="w-full bg-casino-dark border border-casino-border rounded-lg px-3 py-2 text-sm text-casino-cream focus:outline-none focus:border-gold/50 appearance-none cursor-pointer">
+        <option value="1" selected>Dealer Stands</option><option value="0">Dealer Hits</option>
+      </select>
+    </div>
+    <div>
+      <label class="text-[10px] text-casino-muted uppercase tracking-widest mb-1 block">Double After Split</label>
+      <select id="cfg-das" onchange="onRulesChange()" class="w-full bg-casino-dark border border-casino-border rounded-lg px-3 py-2 text-sm text-casino-cream focus:outline-none focus:border-gold/50 appearance-none cursor-pointer">
+        <option value="1" selected>Allowed</option><option value="0">Not Allowed</option>
+      </select>
+    </div>
+    <div>
+      <label class="text-[10px] text-casino-muted uppercase tracking-widest mb-1 block">Surrender</label>
+      <select id="cfg-sur" onchange="onRulesChange()" class="w-full bg-casino-dark border border-casino-border rounded-lg px-3 py-2 text-sm text-casino-cream focus:outline-none focus:border-gold/50 appearance-none cursor-pointer">
+        <option value="1" selected>Late Surrender</option><option value="0">No Surrender</option>
+      </select>
+    </div>
+    <div>
+      <label class="text-[10px] text-casino-muted uppercase tracking-widest mb-1 block">Bankroll ($)</label>
+      <input type="number" id="cfg-bankroll" value="1000" min="100" step="100" onchange="onRulesChange()"
+        class="w-full bg-casino-dark border border-casino-border rounded-lg px-3 py-2 text-sm text-casino-cream focus:outline-none focus:border-gold/50 tabular-nums">
+    </div>
+  </div>
+</section>
+
+<!-- Strategy Chart -->
+<section class="bg-casino-panel border border-casino-border rounded-xl overflow-hidden mb-8">
+  <button onclick="toggleChart()" class="w-full flex items-center justify-between p-4 text-left hover:bg-casino-dark/50 transition-colors" id="chart-toggle">
+    <h2 class="font-display text-lg text-gold">Basic Strategy Reference Chart</h2>
+    <i class="fa-solid fa-chevron-down text-casino-muted transition-transform" id="chart-arrow"></i>
+  </button>
+  <div class="hidden px-4 pb-4 overflow-x-auto" id="chart-body">
+    <div class="text-[10px] text-casino-muted mb-2 flex gap-4 flex-wrap">
+      <span><span class="inline-block w-3 h-3 rounded bg-red-400/80 align-middle mr-1"></span>Hit</span>
+      <span><span class="inline-block w-3 h-3 rounded bg-blue-400/80 align-middle mr-1"></span>Stand</span>
+      <span><span class="inline-block w-3 h-3 rounded bg-yellow-400/80 align-middle mr-1"></span>Double</span>
+      <span><span class="inline-block w-3 h-3 rounded bg-emerald-400/80 align-middle mr-1"></span>Split</span>
+      <span><span class="inline-block w-3 h-3 rounded bg-orange-400/80 align-middle mr-1"></span>Surrender</span>
+      <span><span class="inline-block w-3 h-3 rounded bg-purple-400/80 align-middle mr-1"></span>Insurance</span>
+    </div>
+    <div id="strategy-charts" class="space-y-4"></div>
+  </div>
+</section>
+
+<footer class="text-center text-[10px] text-casino-muted/30 pb-4">
+  For educational purposes only. Card counting is legal but casinos may refuse service.
+</footer>
+</div>
+
+<script>
+/* ========================================
+   ACTION CONSTANTS
+======================================== */
+const HIT=0,STAND=1,DOUBLE=2,SPLIT=3,SURRENDER=4,Dh=5,Ds=6,Rh=7,Rs=8,Ph=9,Rp=10;
+const ACTION_NAMES=['HIT','STAND','DOUBLE','SPLIT','SURRENDER','Dbl/Hit','Dbl/Stand','Sur/Hit','Sur/Stand','Spl/Hit','Spl/Sur'];
+const ACTION_SHORT=['H','S','D','P','R','Dh','Ds','Rh','Rs','Ph','Rp'];
+const ACTION_CSS=['bg-red-400/80 text-casino-black','bg-blue-400/80 text-casino-black','bg-yellow-400/80 text-casino-black','bg-emerald-400/80 text-casino-black','bg-orange-400/80 text-casino-black','bg-yellow-400/80 text-casino-black','bg-yellow-400/80 text-casino-black','bg-orange-400/80 text-casino-black','bg-orange-400/80 text-casino-black','bg-emerald-400/80 text-casino-black','bg-orange-400/80 text-casino-black'];
+
+/* ========================================
+   BASIC STRATEGY TABLES (S17, DAS, LS)
+   Index: dealer 2=0,3=1,4=2,5=3,6=4,7=5,8=6,9=7,10=8,A=9
+======================================== */
+const HARD=[
+  null,null,null,null,
+  [HIT,HIT,HIT,HIT,HIT,HIT,HIT,HIT,HIT,HIT],//4
+  [HIT,HIT,HIT,HIT,HIT,HIT,HIT,HIT,HIT,HIT],//5
+  [HIT,HIT,HIT,HIT,HIT,HIT,HIT,HIT,HIT,HIT],//6
+  [HIT,HIT,HIT,HIT,HIT,HIT,HIT,HIT,HIT,HIT],//7
+  [HIT,HIT,HIT,HIT,HIT,HIT,HIT,HIT,HIT,HIT],//8
+  [HIT,Dh,Dh,Dh,Dh,HIT,HIT,HIT,HIT,HIT],//9
+  [Dh,Dh,Dh,Dh,Dh,Dh,Dh,Dh,HIT,HIT],//10
+  [Dh,Dh,Dh,Dh,Dh,Dh,Dh,Dh,Dh,Dh],//11
+  [HIT,HIT,STAND,STAND,STAND,HIT,HIT,HIT,HIT,HIT],//12
+  [STAND,STAND,STAND,STAND,STAND,HIT,HIT,HIT,HIT,HIT],//13
+  [STAND,STAND,STAND,STAND,STAND,HIT,HIT,HIT,HIT,HIT],//14
+  [STAND,STAND,STAND,STAND,STAND,HIT,HIT,Rh,Rh,Rh],//15
+  [STAND,STAND,STAND,STAND,STAND,HIT,Rh,Rh,Rh,Rh],//16
+  [STAND,STAND,STAND,STAND,STAND,STAND,STAND,STAND,STAND,Rs],//17
+  [STAND,STAND,STAND,STAND,STAND,STAND,STAND,STAND,STAND,STAND],//18
+  [STAND,STAND,STAND,STAND,STAND,STAND,STAND,STAND,STAND,STAND],//19
+  [STAND,STAND,STAND,STAND,STAND,STAND,STAND,STAND,STAND,STAND],//20
+  [STAND,STAND,STAND,STAND,STAND,STAND,STAND,STAND,STAND,STAND],//21
+];
+
+const SOFT=[
+  null,null,null,null,null,null,null,null,null,null,null,null,null,
+  [HIT,HIT,HIT,Dh,Dh,HIT,HIT,HIT,HIT,HIT],//13 A,2
+  [HIT,HIT,HIT,Dh,Dh,HIT,HIT,HIT,HIT,HIT],//14 A,3
+  [HIT,HIT,Dh,Dh,Dh,HIT,HIT,HIT,HIT,HIT],//15 A,4
+  [HIT,HIT,Dh,Dh,Dh,HIT,HIT,HIT,HIT,HIT],//16 A,5
+  [HIT,Dh,Dh,Dh,Dh,HIT,HIT,HIT,HIT,HIT],//17 A,6
+  [STAND,Ds,Ds,Ds,Ds,STAND,STAND,HIT,HIT,HIT],//18 A,7
+  [STAND,STAND,STAND,STAND,STAND,STAND,STAND,STAND,STAND,STAND],//19 A,8
+  [STAND,STAND,STAND,STAND,STAND,STAND,STAND,STAND,STAND,STAND],//20 A,9
+  [STAND,STAND,STAND,STAND,STAND,STAND,STAND,STAND,STAND,STAND],//21 A,10
+];
+
+// Pair rank: 2-10, 11=Ace
+const PAIR=[
+  null,null,
+  [Ph,Ph,SPLIT,SPLIT,SPLIT,SPLIT,HIT,HIT,HIT,HIT],//2
+  [Ph,Ph,SPLIT,SPLIT,SPLIT,SPLIT,SPLIT,HIT,HIT,HIT],//3
+  [HIT,HIT,HIT,Ph,Ph,HIT,HIT,HIT,HIT,HIT],//4
+  [DOUBLE,DOUBLE,DOUBLE,DOUBLE,DOUBLE,DOUBLE,DOUBLE,DOUBLE,HIT,HIT],//5
+  [Ph,SPLIT,SPLIT,SPLIT,SPLIT,SPLIT,HIT,HIT,HIT,HIT],//6
+  [SPLIT,SPLIT,SPLIT,SPLIT,SPLIT,SPLIT,SPLIT,SPLIT,HIT,HIT],//7
+  [SPLIT,SPLIT,SPLIT,SPLIT,SPLIT,SPLIT,SPLIT,SPLIT,SPLIT,SPLIT],//8
+  [SPLIT,SPLIT,SPLIT,SPLIT,SPLIT,STAND,SPLIT,SPLIT,STAND,STAND],//9
+  [STAND,STAND,STAND,STAND,STAND,STAND,STAND,STAND,STAND,STAND],//10
+  [SPLIT,SPLIT,SPLIT,SPLIT,SPLIT,SPLIT,SPLIT,SPLIT,SPLIT,SPLIT],//11 A,A
+];
+
+/* ========================================
+   ILLUSTRIOUS 18 + FAB 4 DEVIATIONS
+======================================== */
+const DEVIATIONS=[
+  {type:'hard',total:16,dealer:10,minTC:0,action:STAND,basic:Rh,desc:'Stand 16 vs 10 at TC≥0'},
+  {type:'hard',total:15,dealer:10,minTC:4,action:STAND,basic:Rh,desc:'Stand 15 vs 10 at TC≥4'},
+  {type:'hard',total:12,dealer:2,minTC:3,action:STAND,basic:HIT,desc:'Stand 12 vs 2 at TC≥3'},
+  {type:'hard',total:12,dealer:3,minTC:2,action:STAND,basic:HIT,desc:'Stand 12 vs 3 at TC≥2'},
+  {type:'hard',total:10,dealer:10,minTC:4,action:DOUBLE,basic:HIT,desc:'Double 10 vs 10 at TC≥4'},
+  {type:'hard',total:10,dealer:1,minTC:4,action:DOUBLE,basic:HIT,desc:'Double 10 vs Ace at TC≥4'},
+  {type:'hard',total:9,dealer:2,minTC:1,action:DOUBLE,basic:HIT,desc:'Double 9 vs 2 at TC≥1'},
+  {type:'hard',total:9,dealer:7,minTC:3,action:DOUBLE,basic:HIT,desc:'Double 9 vs 7 at TC≥3'},
+  {type:'hard',total:16,dealer:9,minTC:5,action:STAND,basic:HIT,desc:'Stand 16 vs 9 at TC≥5'},
+  {type:'soft',total:19,dealer:5,minTC:1,action:DOUBLE,basic:STAND,desc:'Double A,8 vs 5 at TC≥1'},
+  {type:'soft',total:19,dealer:6,minTC:1,action:DOUBLE,basic:STAND,desc:'Double A,8 vs 6 at TC≥1'},
+  {type:'hard',total:14,dealer:10,minTC:3,action:SURRENDER,basic:HIT,desc:'Surrender 14 vs 10 at TC≥3 (Fab 4)'},
+  {type:'hard',total:15,dealer:9,minTC:2,action:SURRENDER,basic:HIT,desc:'Surrender 15 vs 9 at TC≥2 (Fab 4)'},
+];
+
+/* ========================================
+   STATE
+======================================== */
+let settings={numDecks:6,s17:true,das:true,surrender:true,bankroll:1000};
+let seenCards=new Array(14).fill(0); // index 1-13
+let cardHistory=[]; // for undo
+let selectedSlot=null; // 'p1','p2','d'
+let playerCards=[null,null]; // rank values 1-13
+let dealerCard=null;
+let advisorMode='card';
+
+/* ========================================
+   UTILITY FUNCTIONS
+======================================== */
+const RANK_NAME=r=>r===1?'A':r<=10?String(r):r===11?'J':r===12?'Q':'K';
+const RANK_SYMBOLS=['','A','2','3','4','5','6','7','8','9','10','J','Q','K'];
+const HI_LO=r=>(r>=2&&r<=6)?1:(r===1||r>=10)?-1:0;
+const CARD_VALUE=r=>r===1?11:r>=10?10:r;
+const DEALER_IDX=r=>r===1?9:r>=10?8:r-2;
+
+function handTotal(cards){
+  let t=0,a=0;
+  for(const c of cards){if(c===1){a++;t+=11}else{t+=c>=10?10:c}}
+  while(t>21&&a>0){t-=10;a--}
+  return t;
+}
+function isSoft(cards){
+  let t=0,a=0;
+  for(const c of cards){if(c===1){a++;t+=11}else{t+=c>=10?10:c}}
+  while(t>21&&a>0){t-=10;a--}
+  return a>0;
+}
+function remaining(r){return settings.numDecks*4-seenCards[r]}
+function totalRemaining(){let s=0;for(let r=1;r<=13;r++)s+=remaining(r);return s}
+function decksRemaining(){return totalRemaining()/52}
+function runningCount(){let c=0;for(let r=1;r<=13;r++)c+=HI_LO(r)*seenCards[r];return c}
+function trueCount(){const d=decksRemaining();return d>0.5?runningCount()/d:runningCount()}
+function penetration(){return 1-totalRemaining()/(settings.numDecks*52)}
+function playerEdge(){return -0.45+trueCount()*0.53} // approx for 6-deck S17 DAS
+
+function resolveAction(a){
+  switch(a){
+    case Dh:return settings.surrender&&false?SURRENDER:settings.das?DOUBLE:HIT;
+    case Ds:return settings.das?DOUBLE:STAND;
+    case Rh:return settings.surrender?SURRENDER:HIT;
+    case Rs:return settings.surrender?SURRENDER:STAND;
+    case Ph:return settings.das?SPLIT:HIT;
+    case Rp:return settings.surrender?SURRENDER:SPLIT;
+    default:return a;
+  }
+}
+
+function getBasicStrategy(total,soft,isPair,pairRank,dealerUpcard){
+  const di=DEALER_IDX(dealerUpcard);
+  if(isPair&&pairRank!==undefined){
+    const pr=pairRank===1?11:pairRank;
+    const a=PAIR[pr]?.[di];
+    if(a!==undefined)return resolveAction(a);
+  }
+  if(soft){
+    const a=SOFT[total]?.[di];
+    if(a!==undefined)return resolveAction(a);
+  }
+  const a=HARD[total]?.[di];
+  return resolveAction(a??HIT);
+}
+
+function checkDeviation(total,soft,isPair,pairRank,dealerUpcard,tc){
+  for(const d of DEVIATIONS){
+    if(d.type==='hard'&&!soft&&total===d.total&&dealerUpcard===d.dealer&&tc>=d.minTC){
+      return d;
+    }
+    if(d.type==='soft'&&soft&&total===d.total&&dealerUpcard===d.dealer&&tc>=d.minTC){
+      return d;
+    }
+  }
+  return null;
+}
+
+/* ========================================
+   MONTE CARLO SIMULATOR
+======================================== */
+function buildDeck(excludeCards){
+  const deck=[];
+  const excl={};
+  for(const c of excludeCards){excl[c]=(excl[c]||0)+1}
+  for(let r=1;r<=13;r++){
+    let rem=remaining(r)-(excl[r]||0);
+    for(let i=0;i<rem;i++)deck.push(r);
+  }
+  return deck;
+}
+
+function partialShuffle(deck,n){
+  const len=deck.length;
+  for(let i=0;i<n&&i<len;i++){
+    const j=i+Math.floor(Math.random()*(len-i));
+    const tmp=deck[i];deck[i]=deck[j];deck[j]=tmp;
+  }
+}
+
+function simPlayPlayer(pCards,dealerUpcard,forcedAction,deck,idx){
+  const hand=[...pCards];
+  let t=handTotal(hand);
+  let s=isSoft(hand);
+  let canDbl=hand.length===2;
+  let doubled=false;
+
+  if(forcedAction===STAND){/* do nothing */}
+  else if(forcedAction===SURRENDER){return{hand,total:t,bust:false,doubled:false,surrendered:true}}
+  else if(forcedAction===DOUBLE&&canDbl){
+    hand.push(deck[idx++]);t=handTotal(hand);doubled=true;
+  } else if(forcedAction===HIT||(forcedAction===DOUBLE&&!canDbl)){
+    // Hit at least once, then follow basic strategy
+    do{
+      hand.push(deck[idx++]);t=handTotal(hand);s=isSoft(hand);
+      if(t>21||t===21)break;
+      canDbl=false;
+    }while(getBasicStrategy(handTotal(hand),isSoft(hand),false,undefined,dealerUpcard)===HIT);
+  }
+  return{hand,total:t,bust:t>21,doubled,surrendered:false};
+}
+
+function simPlayDealer(dUpcard,deck,idx){
+  const hand=[dUpcard,deck[idx++]];
+  let t=handTotal(hand);let s=isSoft(hand);
+  while(t<17||(settings.s17&&s&&t===17)){
+    hand.push(deck[idx++]);t=handTotal(hand);s=isSoft(hand);
+  }
+  return{hand,total:t,bust:t>21,bj:hand.length===2&&t===21};
+}
+
+function simulateAction(pCards,dealerUpcard,action,numSims){
+  const exclude=[...pCards,dealerUpcard];
+  const deck=buildDeck(exclude);
+  if(deck.length<15)return null;
+  let units=0,wins=0,losses=0,pushes=0;
+  const need=20;
+
+  for(let sim=0;sim<numSims;sim++){
+    partialShuffle(deck,need);
+    let idx=0;
+    const p=simPlayPlayer(pCards,dealerUpcard,action,deck,idx);
+    idx+=p.hand.length-pCards.length;
+    if(p.surrendered){units-=0.5;losses++;continue}
+    const d=simPlayDealer(dealerUpcard,deck,idx);
+    idx+=d.hand.length-1;
+    const pBJ=pCards.length===2&&handTotal(pCards)===21&&!p.doubled;
+    const stake=p.doubled?2:1;
+    if(pBJ&&d.bj){pushes++}
+    else if(pBJ){wins++;units+=1.5}
+    else if(d.bj){losses++;units-=stake}
+    else if(p.bust){losses++;units-=stake}
+    else if(d.bust){wins++;units+=stake}
+    else if(p.total>d.total){wins++;units+=stake}
+    else if(p.total<d.total){losses++;units-=stake}
+    else{pushes++}
+  }
+  return{ev:units/numSims,winRate:wins/numSims,lossRate:losses/numSims,pushRate:pushes/numSims};
+}
+
+/* ========================================
+   CARD TRACKER UI
+======================================== */
+function renderCardGrid(){
+  const grid=document.getElementById('card-grid');
+  grid.innerHTML='';
+  for(let r=1;r<=13;r++){
+    const rem=remaining(r);
+    const tot=settings.numDecks*4;
+    const pct=tot>0?rem/tot:0;
+    const hilo=HI_LO(r);
+    const hiloColor=hilo>0?'text-emerald-400':hilo<0?'text-red-400':'text-gray-500';
+    const hiloBg=hilo>0?'bg-emerald-500':hilo<0?'bg-red-400':'bg-gray-500';
+    const disabled=rem<=0;
+
+    const el=document.createElement('div');
+    el.className=`card-rank bg-casino-dark border border-casino-border rounded-lg p-1.5 sm:p-2 text-center ${disabled?'disabled':''}`;
+    el.innerHTML=`
+      <div class="text-base sm:text-lg font-bold leading-none mb-0.5">${RANK_NAME(r)}</div>
+      <div class="${hiloColor} text-[9px] font-bold mb-1">${hilo>0?'+':''}${hilo}</div>
+      <div class="text-[10px] tabular-nums text-casino-cream">${rem}<span class="text-casino-muted/50">/${tot}</span></div>
+      <div class="h-1 bg-gray-800 rounded-full mt-1 overflow-hidden">
+        <div class="fill-bar h-full ${hiloBg} rounded-full" style="width:${pct*100}%"></div>
+      </div>
+    `;
+    el.addEventListener('click',e=>{e.preventDefault();addSeen(r)});
+    el.addEventListener('contextmenu',e=>{e.preventDefault();removeSeen(r)});
+    grid.appendChild(el);
+  }
+}
+
+function addSeen(r){
+  if(remaining(r)<=0)return;
+  seenCards[r]++;
+  cardHistory.push(r);
+  updateAll();
+}
+function removeSeen(r){
+  if(seenCards[r]<=0)return;
+  seenCards[r]--;
+  cardHistory.push(-r);
+  updateAll();
+}
+function undoLast(){
+  if(cardHistory.length===0)return;
+  const last=cardHistory.pop();
+  if(last>0)seenCards[last]--;
+  else seenCards[-last]++;
+  updateAll();
+}
+function resetShoe(){
+  seenCards.fill(0);
+  cardHistory=[];
+  updateAll();
+}
+
+/* ========================================
+   HAND ADVISOR UI
+======================================== */
+function setMode(mode){
+  advisorMode=mode;
+  document.querySelectorAll('.tab-btn').forEach(b=>b.classList.toggle('active',b.dataset.mode===mode));
+  document.getElementById('card-mode').classList.toggle('hidden',mode!=='card');
+  document.getElementById('total-mode').classList.toggle('hidden',mode!=='total');
+}
+
+function renderCardPicker(){
+  const picker=document.getElementById('card-picker');
+  picker.innerHTML='';
+  picker.style.gridTemplateColumns='repeat(13,1fr)';
+  for(let r=1;r<=13;r++){
+    const btn=document.createElement('button');
+    btn.className='picker-btn w-full aspect-square bg-casino-dark border border-casino-border rounded-lg flex items-center justify-center text-xs sm:text-sm font-bold';
+    btn.textContent=RANK_NAME(r);
+    btn.dataset.rank=r;
+    btn.addEventListener('click',()=>pickCard(r));
+    picker.appendChild(btn);
+  }
+}
+
+function selectSlot(slot){
+  selectedSlot=slot;
+  document.querySelectorAll('.slot-card').forEach(el=>el.classList.remove('active'));
+  document.getElementById('slot-'+slot).classList.add('active');
+  updatePickerHighlight();
+}
+
+function pickCard(r){
+  if(!selectedSlot)return;
+  if(selectedSlot==='p1'){playerCards[0]=r;document.getElementById('slot-p1').textContent=RANK_NAME(r)}
+  else if(selectedSlot==='p2'){playerCards[1]=r;document.getElementById('slot-p2').textContent=RANK_NAME(r)}
+  else if(selectedSlot==='d'){dealerCard=r;document.getElementById('slot-d').textContent=RANK_NAME(r)}
+  updatePickerHighlight();
+}
+
+function updatePickerHighlight(){
+  document.querySelectorAll('.picker-btn').forEach(btn=>{
+    const r=parseInt(btn.dataset.rank);
+    const isP1=playerCards[0]===r;
+    const isP2=playerCards[1]===r;
+    const isD=dealerCard===r;
+    btn.classList.toggle('selected',selectedSlot==='p1'&&isP1||selectedSlot==='p2'&&isP2||selectedSlot==='d'&&isD);
+  });
+}
+
+function clearSlots(){
+  playerCards=[null,null];dealerCard=null;selectedSlot=null;
+  document.getElementById('slot-p1').textContent='?';
+  document.getElementById('slot-p2').textContent='?';
+  document.getElementById('slot-d').textContent='?';
+  document.querySelectorAll('.slot-card').forEach(el=>el.classList.remove('active'));
+  updatePickerHighlight();
+}
+
+/* ========================================
+   CALCULATE ADVICE
+======================================== */
+let calcTimeout=null;
+function calculateAdvice(){
+  clearTimeout(calcTimeout);
+  calcTimeout=setTimeout(_calculateAdvice,50);
+}
+
+function _calculateAdvice(){
+  let pCards,total,soft,isPair=false,pairRank,dealerUpcard;
+
+  if(advisorMode==='card'){
+    if(playerCards[0]===null||playerCards[1]===null||dealerCard===null){
+      showToast('Select all cards first');return;
+    }
+    pCards=[playerCards[0],playerCards[1]];
+    // Normalize 10-value cards for pair detection
+    const v1=playerCards[0]>=10?10:playerCards[0];
+    const v2=playerCards[1]>=10?10:playerCards[1];
+    isPair=v1===v2;
+    pairRank=v1;
+    total=handTotal(pCards);
+    soft=isSoft(pCards);
+    dealerUpcard=dealerCard;
+  } else {
+    total=parseInt(document.getElementById('total-input').value);
+    soft=document.getElementById('soft-check').checked;
+    dealerUpcard=parseInt(document.getElementById('dealer-select').value);
+    pCards=null; // no specific cards in total mode
+    isPair=false;pairRank=undefined;
+    if(isNaN(total)||total<4||total>21){showToast('Enter a valid total (4-21)');return}
+  }
+
+  const tc=trueCount();
+  const edge=playerEdge();
+
+  // Get basic strategy action
+  const basicAction=getBasicStrategy(total,soft,isPair,pairRank,dealerUpcard);
+
+  // Check for deviations
+  const deviation=checkDeviation(total,soft,isPair,pairRank,dealerUpcard,tc);
+  const finalAction=deviation?deviation.action:basicAction;
+
+  // Check insurance
+  const showInsurance=dealerUpcard===1;
+  const takeInsurance=tc>=3;
+
+  // Show results panel
+  document.getElementById('results-panel').classList.remove('hidden');
+
+  // Main recommendation
+  const recEl=document.getElementById('rec-action');
+  const recCard=document.getElementById('rec-card');
+  recEl.textContent=ACTION_NAMES[finalAction];
+  recEl.className='text-4xl sm:text-5xl font-black mb-1 action-badge '+getActionTextClass(finalAction);
+  recCard.className='bg-casino-panel border-2 rounded-xl p-5 text-center '+(finalAction===STAND||finalAction===DOUBLE||finalAction===SPLIT?'glow-green':'glow-red');
+
+  // Run simulations for EV
+  const simCards=pCards||generateCardsForTotal(total,soft);
+  const numSims=4000;
+  let simResults=null;
+  let comparisonData=[];
+
+  // Simulate the recommended action (skip split for sim)
+  if(finalAction!==SPLIT){
+    simResults=simulateAction(simCards,dealerUpcard,finalAction,numSims);
+  }
+
+  // Simulate other actions for comparison
+  const validActions=[HIT,STAND];
+  if(simCards.length===2)validActions.push(DOUBLE);
+  if(isPair&&simCards.length===2)validActions.push(SPLIT);
+  if(settings.surrender)validActions.push(SURRENDER);
+
+  for(const act of validActions){
+    if(act===SPLIT){
+      comparisonData.push({action:SPLIT,ev:null,winRate:null,lossRate:null,pushRate:null});
+      continue;
+    }
+    const res=simulateAction(simCards,dealerUpcard,act,numSims);
+    if(res)comparisonData.push({action:act,...res});
+  }
+
+  // Display EV
+  let evText;
+  if(finalAction===SPLIT){
+    evText='EV: Higher than alternatives (split simulation complex)';
+    document.getElementById('rec-ev').textContent=evText;
+  } else if(simResults){
+    document.getElementById('rec-ev').textContent=`EV: ${(simResults.ev*100).toFixed(2)}%`;
+  }
+
+  // Probabilities
+  if(simResults){
+    document.getElementById('prob-win').textContent=(simResults.winRate*100).toFixed(1)+'%';
+    document.getElementById('prob-lose').textContent=(simResults.lossRate*100).toFixed(1)+'%';
+    document.getElementById('prob-push').textContent=(simResults.pushRate*100).toFixed(1)+'%';
+    document.getElementById('bar-win').style.width=(simResults.winRate*100)+'%';
+    document.getElementById('bar-lose').style.width=(simResults.lossRate*100)+'%';
+    document.getElementById('bar-push').style.width=(simResults.pushRate*100)+'%';
+    document.getElementById('sim-info').textContent=`Based on ${numSims} Monte Carlo simulations with current deck composition`;
+  } else {
+    document.getElementById('prob-win').textContent='—';
+    document.getElementById('prob-lose').textContent='—';
+    document.getElementById('prob-push').textContent='—';
+    document.getElementById('bar-win').style.width='0%';
+    document.getElementById('bar-lose').style.width='0%';
+    document.getElementById('bar-push').style.width='0%';
+    document.getElementById('sim-info').textContent='Split probability requires complex multi-hand simulation';
+  }
+
+  // Action comparison
+  const compEl=document.getElementById('ev-comparison');
+  compEl.innerHTML='';
+  // Sort by EV descending
+  const sorted=[...comparisonData].sort((a,b)=>(b.ev||0)-(a.ev||0));
+  for(const item of sorted){
+    const isRec=item.action===finalAction;
+    const evStr=item.ev!==null?(item.ev*100).toFixed(2)+'%':'N/A';
+    const barW=item.ev!==null?Math.min(Math.max((item.ev+0.5)*50,2),100):0;
+    const barColor=item.ev>0?'bg-emerald-500':item.ev<0?'bg-red-500':'bg-gray-500';
+    const div=document.createElement('div');
+    div.className=`flex items-center gap-2 ${isRec?'':'opacity-60'}`;
+    div.innerHTML=`
+      <div class="w-10 text-xs font-bold ${getActionTextClass(item.action)}">${ACTION_SHORT[item.action]}</div>
+      <div class="flex-1 h-2.5 bg-gray-800 rounded-full overflow-hidden">
+        <div class="h-full ${barColor} rounded-full transition-all duration-500" style="width:${barW}%"></div>
+      </div>
+      <div class="w-16 text-right text-xs tabular-nums font-mono ${item.ev>0?'text-emerald-400':item.ev<0?'text-red-400':'text-gray-400'}">${evStr}</div>
+      ${isRec?'<i class="fa-solid fa-check text-gold text-xs w-4"></i>':'<div class="w-4"></div>'}
+    `;
+    compEl.appendChild(div);
+  }
+
+  // Deviation alert
+  const devEl=document.getElementById('deviation-alert');
+  if(deviation){
+    devEl.classList.remove('hidden');
+    document.getElementById('deviation-text').textContent=
+      `${deviation.desc} — Basic strategy says ${ACTION_NAMES[deviation.basic]}, but at TC ${tc.toFixed(1)}, ${ACTION_NAMES[deviation.action]} is optimal.`;
+  } else {
+    devEl.classList.add('hidden');
+  }
+
+  // Bet sizing
+  const kelly=edge/1.26; // variance ~1.26 for blackjack
+  const bankroll=settings.bankroll;
+  document.getElementById('bet-quarter').textContent='$'+Math.max(0,Math.round(kelly*0.25*bankroll));
+  document.getElementById('bet-half').textContent='$'+Math.max(0,Math.round(kelly*0.5*bankroll));
+  document.getElementById('bet-full').textContent='$'+Math.max(0,Math.round(kelly*bankroll));
+
+  // Insurance
+  const insEl=document.getElementById('insurance-panel');
+  if(showInsurance){
+    insEl.classList.remove('hidden');
+    const insIcon=document.getElementById('insurance-icon');
+    const insText=document.getElementById('insurance-text');
+    const insDetail=document.getElementById('insurance-detail');
+    if(takeInsurance){
+      insIcon.className='fa-solid fa-shield-halved text-lg text-emerald-400';
+      insText.textContent='Take Insurance';
+      insText.className='font-bold text-sm text-emerald-400';
+      insDetail.textContent=`True count ${tc.toFixed(1)} ≥ 3.0 — Positive EV insurance bet.`;
+    } else {
+      insIcon.className='fa-solid fa-shield-halved text-lg text-red-400';
+      insText.textContent='Decline Insurance';
+      insText.className='font-bold text-sm text-red-400';
+      insDetail.textContent=`True count ${tc.toFixed(1)} < 3.0 — Negative EV insurance bet.`;
+    }
+  } else {
+    insEl.classList.add('hidden');
+  }
+}
+
+function generateCardsForTotal(total,soft){
+  // Generate a plausible 2-card hand for the given total
+  if(soft){
+    const other=total-11; // Ace = 11, other card makes up the rest
+    return[1, other>=10?10:other];
+  }
+  // Hard total - generate two cards that sum to total
+  // Simple: use total-10 and 10 for totals >= 12, otherwise total-2 and 2
+  if(total>=12){
+    const first=Math.min(total-10,10);
+    return[first>=10?10:first, 10];
+  }
+  return[Math.max(total-2,2), 2];
+}
+
+function getActionTextClass(action){
+  switch(action){
+    case HIT:return 'text-red-400';
+    case STAND:return 'text-blue-400';
+    case DOUBLE:return 'text-yellow-400';
+    case SPLIT:return 'text-emerald-400';
+    case SURRENDER:return 'text-orange-400';
+    default:return 'text-casino-cream';
+  }
+}
+
+/* ========================================
+   DASHBOARD UPDATE
+======================================== */
+function updateDashboard(){
+  const rc=runningCount();
+  const tc=trueCount();
+  const dr=decksRemaining();
+  const pen=penetration();
+  const edge=playerEdge();
+
+  const rcEl=document.getElementById('rc-display');
+  rcEl.textContent=(rc>0?'+':'')+rc;
+  rcEl.className='text-2xl sm:text-3xl font-bold tabular-nums '+(rc>0?'text-emerald-400':rc<0?'text-red-400':'text-casino-cream');
+
+  const tcEl=document.getElementById('tc-display');
+  tcEl.textContent=(tc>0?'+':'')+tc.toFixed(1);
+  tcEl.className='text-2xl sm:text-3xl font-bold tabular-nums '+(tc>0?'text-emerald-400':tc<0?'text-red-400':'text-casino-cream');
+
+  document.getElementById('dr-display').textContent=dr.toFixed(1);
+  document.getElementById('pen-display').textContent=(pen*100).toFixed(0)+'%';
+  document.getElementById('pen-bar').style.width=(pen*100)+'%';
+
+  const edgeStr=(edge>0?'+':'')+edge.toFixed(2)+'%';
+  const edgeEl=document.getElementById('edge-display');
+  edgeEl.textContent=edgeStr;
+  edgeEl.className='text-2xl sm:text-3xl font-bold tabular-nums '+(edge>0?'text-emerald-400':edge<0?'text-red-400':'text-casino-cream');
+
+  // Edge bar
+  const bar=document.getElementById('edge-bar');
+  const clampedEdge=Math.max(-2,Math.min(2,edge));
+  const scale=25; // 1% = 25% of bar
+  if(clampedEdge>=0){
+    bar.style.left='50%';
+    bar.style.width=(clampedEdge*scale)+'%';
+    bar.style.background='#4ade80';
+  } else {
+    bar.style.left=(50+clampedEdge*scale)+'%';
+    bar.style.width=(-clampedEdge*scale)+'%';
+    bar.style.background='#f87171';
+  }
+}
+
+function updateAll(){
+  renderCardGrid();
+  updateDashboard();
+}
+
+/* ========================================
+   RULES
+======================================== */
+function onRulesChange(){
+  settings.numDecks=parseInt(document.getElementById('cfg-decks').value);
+  settings.s17=document.getElementById('cfg-s17').value==='1';
+  settings.das=document.getElementById('cfg-das').value==='1';
+  settings.surrender=document.getElementById('cfg-sur').value==='1';
+  settings.bankroll=Math.max(100,parseInt(document.getElementById('cfg-bankroll').value)||1000);
+  document.getElementById('bankroll-display').textContent=settings.bankroll;
+  // Clamp seen cards to new deck size
+  for(let r=1;r<=13;r++){
+    const max=settings.numDecks*4;
+    if(seenCards[r]>max)seenCards[r]=max;
+  }
+  updateAll();
+  renderStrategyChart();
+}
+
+/* ========================================
+   STRATEGY CHART
+======================================== */
+function toggleChart(){
+  const body=document.getElementById('chart-body');
+  const arrow=document.getElementById('chart-arrow');
+  body.classList.toggle('hidden');
+  arrow.style.transform=body.classList.contains('hidden')?'':'rotate(180deg)';
+}
+
+function renderStrategyChart(){
+  const container=document.getElementById('strategy-charts');
+  const dealers=['2','3','4','5','6','7','8','9','10','A'];
+  let html='';
+
+  // Hard totals
+  html+='<div><div class="text-xs font-bold text-casino-muted mb-1">Hard Totals</div><table class="charts-grid w-full"><tr><th class="!text-left !pl-2">Total</th>';
+  for(const d of dealers)html+=`<th>${d}</th>`;
+  html+='</tr>';
+  for(let t=4;t<=21;t++){
+    html+=`<tr><td class="!text-left !pl-2 font-bold">${t}</td>`;
+    for(let di=0;di<10;di++){
+      const a=resolveAction(HARD[t][di]);
+      html+=`<td class="${ACTION_CSS[a]} rounded font-bold text-[11px]">${ACTION_SHORT[a]}</td>`;
+    }
+    html+='</tr>';
+  }
+  html+='</table></div>';
+
+  // Soft totals
+  html+='<div><div class="text-xs font-bold text-casino-muted mb-1">Soft Totals</div><table class="charts-grid w-full"><tr><th class="!text-left !pl-2">Hand</th>';
+  for(const d of dealers)html+=`<th>${d}</th>`;
+  html+='</tr>';
+  const softLabels=['','A,2','A,3','A,4','A,5','A,6','A,7','A,8','A,9','A,10'];
+  for(let t=13;t<=21;t++){
+    html+=`<tr><td class="!text-left !pl-2 font-bold">${softLabels[t-12]||t}</td>`;
+    for(let di=0;di<10;di++){
+      const a=resolveAction(SOFT[t][di]);
+      html+=`<td class="${ACTION_CSS[a]} rounded font-bold text-[11px]">${ACTION_SHORT[a]}</td>`;
+    }
+    html+='</tr>';
+  }
+  html+='</table></div>';
+
+  // Pairs
+  html+='<div><div class="text-xs font-bold text-casino-muted mb-1">Pairs</div><table class="charts-grid w-full"><tr><th class="!text-left !pl-2">Pair</th>';
+  for(const d of dealers)html+=`<th>${d}</th>`;
+  html+='</tr>';
+  const pairLabels=['','','2,2','3,3','4,4','5,5','6,6','7,7','8,8','9,9','10,10','A,A'];
+  for(let pr=2;pr<=11;pr++){
+    html+=`<tr><td class="!text-left !pl-2 font-bold">${pairLabels[pr]}</td>`;
+    for(let di=0;di<10;di++){
+      const a=resolveAction(PAIR[pr][di]);
+      html+=`<td class="${ACTION_CSS[a]} rounded font-bold text-[11px]">${ACTION_SHORT[a]}</td>`;
+    }
+    html+='</tr>';
+  }
+  html+='</table></div>';
+
+  container.innerHTML=html;
+}
+
+/* ========================================
+   TOAST NOTIFICATION
+======================================== */
+function showToast(msg){
+  let toast=document.getElementById('toast');
+  if(!toast){
+    toast=document.createElement('div');
+    toast.id='toast';
+    toast.className='fixed bottom-6 left-1/2 -translate-x-1/2 bg-casino-dark border border-gold/30 text-casino-cream px-5 py-3 rounded-xl text-sm shadow-2xl z-50 transition-all duration-300 opacity-0 translate-y-4 pointer-events-none';
+    document.body.appendChild(toast);
+  }
+  toast.textContent=msg;
+  toast.classList.remove('opacity-0','translate-y-4');
+  toast.classList.add('opacity-100','translate-y-0');
+  clearTimeout(toast._timer);
+  toast._timer=setTimeout(()=>{
+    toast.classList.add('opacity-0','translate-y-4');
+    toast.classList.remove('opacity-100','translate-y-0');
+  },2000);
+}
+
+/* ========================================
+   QUICK INPUT HANDLER
+======================================== */
+document.addEventListener('DOMContentLoaded',()=>{
+  const input=document.getElementById('quick-input');
+  input.addEventListener('keydown',e=>{
+    if(e.key==='Enter'){
+      e.preventDefault();
+      const text=input.value.toUpperCase().replace(/[^A2-9TJQK]/g,'');
+      if(!text)return;
+      for(const ch of text){
+        let r=null;
+        if(ch==='A')r=1;
+        else if(ch>='2'&&ch<='9')r=parseInt(ch);
+        else if(ch==='T')r=10;
+        else if(ch==='J')r=11;
+        else if(ch==='Q')r=12;
+        else if(ch==='K')r=13;
+        if(r!==null&&remaining(r)>0){
+          seenCards[r]++;
+          cardHistory.push(r);
+        }
+      }
+      input.value='';
+      updateAll();
+    }
+  });
+  // Also add on blur or paste
+  input.addEventListener('paste',e=>{
+    setTimeout(()=>{
+      input.dispatchEvent(new KeyboardEvent('keydown',{key:'Enter'}));
+    },50);
+  });
+});
+
+/* ========================================
+   KEYBOARD SHORTCUTS
+======================================== */
+document.addEventListener('keydown',e=>{
+  if(e.target.tagName==='INPUT'||e.target.tagName==='SELECT')return;
+  if(e.key==='z'&&(e.ctrlKey||e.metaKey)){e.preventDefault();undoLast()}
+  if(e.key==='n'&&(e.ctrlKey||e.metaKey)){e.preventDefault();resetShoe()}
+});
+
+/* ========================================
+   INIT
+======================================== */
+function init(){
+  renderCardGrid();
+  renderCardPicker();
+  updateDashboard();
+  renderStrategyChart();
+  document.getElementById('bankroll-display').textContent=settings.bankroll;
+}
+init();
+</script>
+</body>
+</html><!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Blackjack Advantage Engine</title>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;900&family=DM+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+tailwind.config={theme:{extend:{colors:{felt:'#0d4a2e','felt-dark':'#082a1a',gold:'#c9a84c','gold-light':'#e5cc7a','gold-dark':'#8a7233',casino:{black:'#080c08',dark:'#0f1f14',green:'#0d4a2e',cream:'#e2ddd0',muted:'#6b7a6e',border:'#1a3322',red:'#ef4444',panel:'#111e15'}},fontFamily:{display:['Playfair Display','serif'],sans:['DM Sans','sans-serif']}}}}
+</script>
+<style>
+*{box-sizing:border-box}
+body{background:#080c08;overflow-x:hidden}
+.bg-atmo{position:fixed;inset:0;pointer-events:none;background:radial-gradient(ellipse at 30% 20%,rgba(13,74,46,.12) 0%,transparent 60%),radial-gradient(ellipse at 70% 80%,rgba(13,74,46,.08) 0%,transparent 50%),radial-gradient(ellipse at 50% 50%,rgba(201,168,76,.03) 0%,transparent 40%)}
+.glow-gold{box-shadow:0 0 20px rgba(201,168,76,.15),inset 0 1px 0 rgba(201,168,76,.1)}
+.glow-green{box-shadow:0 0 25px rgba(74,222,128,.2)}
+.glow-red{box-shadow:0 0 25px rgba(239,68,68,.2)}
+.card-rank{transition:all .15s ease;cursor:pointer;user-select:none;position:relative;overflow:hidden}
+.card-rank:hover:not(.disabled){transform:translateY(-2px);box-shadow:0 4px 12px rgba(0,0,0,.4)}
+.card-rank:active:not(.disabled){transform:scale(.95)}
+.card-rank.disabled{opacity:.3;cursor:not-allowed;pointer-events:none}
+.card-rank .fill-bar{transition:width .3s ease}
+.slot-card{transition:all .2s ease;cursor:pointer}
+.slot-card:hover{border-color:rgba(201,168,76,.5)}
+.slot-card.active{border-color:#c9a84c;box-shadow:0 0 12px rgba(201,168,76,.3)}
+.picker-btn{transition:all .12s ease;cursor:pointer}
+.picker-btn:hover{background:rgba(201,168,76,.2);transform:scale(1.08)}
+.picker-btn.selected{background:rgba(201,168,76,.3);border-color:#c9a84c}
+.action-badge{animation:fadeSlideIn .3s ease}
+@keyframes fadeSlideIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+@keyframes pulse-glow{0%,100%{box-shadow:0 0 15px rgba(201,168,76,.2)}50%{box-shadow:0 0 30px rgba(201,168,76,.4)}}
+.pulse-border{animation:pulse-glow 2s ease-in-out infinite}
+.edge-bar-fill{transition:all .6s cubic-bezier(.4,0,.2,1)}
+.prob-bar{transition:width .4s ease}
+.tab-btn{transition:all .15s ease}
+.tab-btn.active{background:rgba(201,168,76,.15);color:#c9a84c;border-color:rgba(201,168,76,.3)}
+.charts-grid td,.charts-grid th{padding:4px 6px;text-align:center;font-size:12px;border:1px solid rgba(26,51,34,.6)}
+.charts-grid th{background:rgba(201,168,76,.1);color:#c9a84c;font-weight:600}
+::-webkit-scrollbar{width:6px;height:6px}
+::-webkit-scrollbar-track{background:#0a0e0a}
+::-webkit-scrollbar-thumb{background:#1a3322;border-radius:3px}
+::-webkit-scrollbar-thumb:hover{background:#2a5035}
+@media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+</head>
+<body class="min-h-screen font-sans text-casino-cream">
+<div class="bg-atmo"></div>
+
+<div class="relative z-10 max-w-7xl mx-auto px-3 sm:px-6 py-4 sm:py-6">
+
+<!-- Header -->
+<header class="text-center mb-6 sm:mb-8">
+  <h1 class="font-display text-3xl sm:text-4xl md:text-5xl font-black text-gold tracking-tight leading-tight">
+    Blackjack Advantage Engine
+  </h1>
+  <p class="text-casino-muted mt-1.5 text-xs sm:text-sm tracking-[.25em] uppercase">
+    Hi-Lo Count System &middot; Optimal Strategy &middot; Kelly Bet Sizing
+  </p>
+</header>
+
+<!-- Count Dashboard -->
+<section class="grid grid-cols-2 lg:grid-cols-5 gap-3 mb-6" id="dash">
+  <div class="bg-casino-panel border border-casino-border rounded-xl p-3 sm:p-4 glow-gold">
+    <div class="text-casino-muted text-[10px] uppercase tracking-widest mb-1">Running Count</div>
+    <div class="text-2xl sm:text-3xl font-bold tabular-nums" id="rc-display">0</div>
+  </div>
+  <div class="bg-casino-panel border border-casino-border rounded-xl p-3 sm:p-4">
+    <div class="text-casino-muted text-[10px] uppercase tracking-widest mb-1">True Count</div>
+    <div class="text-2xl sm:text-3xl font-bold tabular-nums" id="tc-display">0.0</div>
+  </div>
+  <div class="bg-casino-panel border border-casino-border rounded-xl p-3 sm:p-4">
+    <div class="text-casino-muted text-[10px] uppercase tracking-widest mb-1">Decks Remaining</div>
+    <div class="text-2xl sm:text-3xl font-bold tabular-nums" id="dr-display">6.0</div>
+  </div>
+  <div class="bg-casino-panel border border-casino-border rounded-xl p-3 sm:p-4">
+    <div class="text-casino-muted text-[10px] uppercase tracking-widest mb-1">Player Edge</div>
+    <div class="text-2xl sm:text-3xl font-bold tabular-nums" id="edge-display">-0.45%</div>
+  </div>
+  <div class="col-span-2 lg:col-span-1 bg-casino-panel border border-casino-border rounded-xl p-3 sm:p-4">
+    <div class="text-casino-muted text-[10px] uppercase tracking-widest mb-1">Penetration</div>
+    <div class="text-2xl sm:text-3xl font-bold tabular-nums" id="pen-display">0%</div>
+    <div class="h-1.5 bg-gray-800 rounded-full mt-2 overflow-hidden">
+      <div class="h-full bg-gold rounded-full transition-all duration-300" id="pen-bar" style="width:0%"></div>
+    </div>
+  </div>
+</section>
+
+<!-- Edge Meter -->
+<div class="bg-casino-panel border border-casino-border rounded-xl p-4 mb-6">
+  <div class="flex justify-between text-[10px] text-casino-muted uppercase tracking-widest mb-2">
+    <span>House Edge</span><span>Neutral</span><span>Player Edge</span>
+  </div>
+  <div class="h-4 bg-gray-800/80 rounded-full overflow-hidden relative">
+    <div class="absolute inset-y-0 left-1/2 w-px bg-casino-muted/40 z-10"></div>
+    <div class="edge-bar-fill h-full rounded-full absolute top-0" id="edge-bar" style="left:50%;width:0%;background:#ef4444"></div>
+  </div>
+  <div class="flex justify-between text-[9px] text-casino-muted/50 mt-1 tabular-nums">
+    <span>-2%</span><span>-1%</span><span>0%</span><span>+1%</span><span>+2%</span>
+  </div>
+</div>
+
+<!-- Main Grid -->
+<div class="grid grid-cols-1 lg:grid-cols-5 gap-5 mb-6">
+
+  <!-- Card Tracker -->
+  <section class="lg:col-span-2 bg-casino-panel border border-casino-border rounded-xl p-4">
+    <div class="flex items-center justify-between mb-3">
+      <h2 class="font-display text-lg text-gold">Card Tracker</h2>
+      <div class="flex gap-2">
+        <button onclick="undoLast()" class="text-xs px-2.5 py-1 rounded-lg bg-casino-dark border border-casino-border text-casino-muted hover:text-casino-cream transition-colors" title="Undo last card">
+          <i class="fa-solid fa-rotate-left mr-1"></i>Undo
+        </button>
+        <button onclick="resetShoe()" class="text-xs px-2.5 py-1 rounded-lg bg-casino-dark border border-casino-border text-casino-muted hover:text-casino-cream transition-colors">
+          <i class="fa-solid fa-arrows-rotate mr-1"></i>New Shoe
+        </button>
+      </div>
+    </div>
+
+    <!-- Quick Input -->
+    <div class="mb-3">
+      <input type="text" id="quick-input" placeholder="Quick add: A235TQK..."
+        class="w-full bg-casino-dark border border-casino-border rounded-lg px-3 py-2 text-sm text-casino-cream placeholder-casino-muted/50 focus:outline-none focus:border-gold/50 transition-colors font-mono tracking-wider">
+      <div class="text-[9px] text-casino-muted/40 mt-1">A=Ace, 2-9, T=10, J, Q, K &middot; Left-click card to add, right-click to remove</div>
+    </div>
+
+    <!-- Card Grid -->
+    <div class="grid grid-cols-7 gap-1.5 sm:gap-2" id="card-grid"></div>
+
+    <!-- Count Legend -->
+    <div class="flex items-center justify-center gap-4 mt-3 text-[10px] text-casino-muted">
+      <span><span class="inline-block w-2 h-2 rounded-full bg-emerald-500 mr-1"></span>+1 (2-6)</span>
+      <span><span class="inline-block w-2 h-2 rounded-full bg-gray-500 mr-1"></span>0 (7-9)</span>
+      <span><span class="inline-block w-2 h-2 rounded-full bg-red-400 mr-1"></span>-1 (10-A)</span>
+    </div>
+  </section>
+
+  <!-- Hand Advisor -->
+  <section class="lg:col-span-3 space-y-4">
+    <!-- Mode Toggle -->
+    <div class="bg-casino-panel border border-casino-border rounded-xl p-4">
+      <div class="flex items-center gap-2 mb-3">
+        <h2 class="font-display text-lg text-gold">Hand Advisor</h2>
+        <div class="flex ml-auto bg-casino-dark rounded-lg border border-casino-border overflow-hidden">
+          <button class="tab-btn active text-xs px-3 py-1.5 border-r border-casino-border" data-mode="card" onclick="setMode('card')">Cards</button>
+          <button class="tab-btn text-xs px-3 py-1.5" data-mode="total" onclick="setMode('total')">Total</button>
+        </div>
+      </div>
+
+      <!-- Card Mode -->
+      <div id="card-mode">
+        <div class="flex flex-wrap gap-3 mb-3">
+          <div class="flex-1 min-w-[100px]">
+            <div class="text-[10px] text-casino-muted uppercase tracking-widest mb-1">Your Hand</div>
+            <div class="flex gap-2">
+              <div class="slot-card w-14 h-20 bg-casino-dark border-2 border-casino-border rounded-lg flex items-center justify-center text-xl font-bold" id="slot-p1" onclick="selectSlot('p1')">?</div>
+              <div class="slot-card w-14 h-20 bg-casino-dark border-2 border-casino-border rounded-lg flex items-center justify-center text-xl font-bold" id="slot-p2" onclick="selectSlot('p2')">?</div>
+            </div>
+          </div>
+          <div class="min-w-[70px]">
+            <div class="text-[10px] text-casino-muted uppercase tracking-widest mb-1">Dealer</div>
+            <div class="slot-card w-14 h-20 bg-casino-dark border-2 border-casino-border rounded-lg flex items-center justify-center text-xl font-bold" id="slot-d" onclick="selectSlot('d')">?</div>
+          </div>
+        </div>
+        <div class="text-[10px] text-casino-muted uppercase tracking-widest mb-1.5">Select a slot above, then pick a card:</div>
+        <div class="grid grid-cols-13 gap-1" id="card-picker"></div>
+      </div>
+
+      <!-- Total Mode -->
+      <div id="total-mode" class="hidden">
+        <div class="grid grid-cols-2 gap-4 mb-3">
+          <div>
+            <label class="text-[10px] text-casino-muted uppercase tracking-widest mb-1 block">Your Total</label>
+            <input type="number" min="4" max="21" id="total-input" value="16"
+              class="w-full bg-casino-dark border border-casino-border rounded-lg px-3 py-2.5 text-xl font-bold text-casino-cream focus:outline-none focus:border-gold/50 transition-colors tabular-nums">
+          </div>
+          <div>
+            <label class="text-[10px] text-casino-muted uppercase tracking-widest mb-1 block">Dealer Upcard</label>
+            <select id="dealer-select" class="w-full bg-casino-dark border border-casino-border rounded-lg px-3 py-2.5 text-xl font-bold text-casino-cream focus:outline-none focus:border-gold/50 transition-colors appearance-none cursor-pointer">
+              <option value="2">2</option><option value="3">3</option><option value="4">4</option>
+              <option value="5">5</option><option value="6">6</option><option value="7">7</option>
+              <option value="8">8</option><option value="9">9</option><option value="10">10</option>
+              <option value="1">Ace</option>
+            </select>
+          </div>
+        </div>
+        <label class="flex items-center gap-2 cursor-pointer">
+          <input type="checkbox" id="soft-check" class="w-4 h-4 rounded accent-gold">
+          <span class="text-sm text-casino-muted">Soft hand (contains Ace counted as 11)</span>
+        </label>
+      </div>
+
+      <button onclick="calculateAdvice()" class="mt-4 w-full py-3 bg-gradient-to-r from-gold-dark to-gold text-casino-black font-bold rounded-xl hover:from-gold hover:to-gold-light transition-all text-sm tracking-wider uppercase">
+        <i class="fa-solid fa-calculator mr-2"></i>Calculate Optimal Play
+      </button>
+    </div>
+
+    <!-- Results -->
+    <div id="results-panel" class="hidden space-y-4">
+      <!-- Main Recommendation -->
+      <div class="bg-casino-panel border-2 rounded-xl p-5 text-center" id="rec-card">
+        <div class="text-[10px] text-casino-muted uppercase tracking-widest mb-2">Optimal Play</div>
+        <div class="text-4xl sm:text-5xl font-black mb-1" id="rec-action">STAND</div>
+        <div class="text-sm text-casino-muted" id="rec-ev">EV: +0.00%</div>
+      </div>
+
+      <!-- Deviation Alert -->
+      <div class="hidden bg-casino-panel border border-gold/30 rounded-xl p-4" id="deviation-alert">
+        <div class="flex items-start gap-3">
+          <i class="fa-solid fa-bolt text-gold mt-0.5"></i>
+          <div>
+            <div class="text-xs font-bold text-gold uppercase tracking-wider">Count Deviation Active</div>
+            <div class="text-sm text-casino-cream mt-1" id="deviation-text"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Probabilities -->
+      <div class="bg-casino-panel border border-casino-border rounded-xl p-4">
+        <div class="text-[10px] text-casino-muted uppercase tracking-widest mb-3">Win Probability (Simulation)</div>
+        <div class="space-y-2.5">
+          <div>
+            <div class="flex justify-between text-xs mb-0.5"><span class="text-emerald-400">Win</span><span class="tabular-nums" id="prob-win">0%</span></div>
+            <div class="h-2.5 bg-gray-800 rounded-full overflow-hidden"><div class="prob-bar h-full bg-emerald-500 rounded-full" id="bar-win" style="width:0%"></div></div>
+          </div>
+          <div>
+            <div class="flex justify-between text-xs mb-0.5"><span class="text-red-400">Lose</span><span class="tabular-nums" id="prob-lose">0%</span></div>
+            <div class="h-2.5 bg-gray-800 rounded-full overflow-hidden"><div class="prob-bar h-full bg-red-500 rounded-full" id="bar-lose" style="width:0%"></div></div>
+          </div>
+          <div>
+            <div class="flex justify-between text-xs mb-0.5"><span class="text-slate-400">Push</span><span class="tabular-nums" id="prob-push">0%</span></div>
+            <div class="h-2.5 bg-gray-800 rounded-full overflow-hidden"><div class="prob-bar h-full bg-slate-500 rounded-full" id="bar-push" style="width:0%"></div></div>
+          </div>
+        </div>
+        <div class="text-[9px] text-casino-muted/40 mt-2" id="sim-info"></div>
+      </div>
+
+      <!-- Action Comparison -->
+      <div class="bg-casino-panel border border-casino-border rounded-xl p-4">
+        <div class="text-[10px] text-casino-muted uppercase tracking-widest mb-3">Action Comparison (EV per unit)</div>
+        <div class="space-y-2" id="ev-comparison"></div>
+      </div>
+
+      <!-- Bet Sizing -->
+      <div class="bg-casino-panel border border-casino-border rounded-xl p-4">
+        <div class="text-[10px] text-casino-muted uppercase tracking-widest mb-3">Kelly Criterion Bet Sizing</div>
+        <div class="grid grid-cols-3 gap-3">
+          <div class="text-center">
+            <div class="text-[10px] text-casino-muted mb-1">1/4 Kelly</div>
+            <div class="text-lg font-bold text-gold tabular-nums" id="bet-quarter">$0</div>
+          </div>
+          <div class="text-center">
+            <div class="text-[10px] text-casino-muted mb-1">1/2 Kelly</div>
+            <div class="text-lg font-bold text-gold tabular-nums" id="bet-half">$0</div>
+          </div>
+          <div class="text-center">
+            <div class="text-[10px] text-casino-muted mb-1">Full Kelly</div>
+            <div class="text-lg font-bold text-gold tabular-nums" id="bet-full">$0</div>
+          </div>
+        </div>
+        <div class="text-[9px] text-casino-muted/40 mt-2">Based on bankroll: $<span id="bankroll-display">1000</span></div>
+      </div>
+
+      <!-- Insurance -->
+      <div class="hidden bg-casino-panel border border-casino-border rounded-xl p-4" id="insurance-panel">
+        <div class="flex items-center gap-3">
+          <i class="fa-solid fa-shield-halved text-lg" id="insurance-icon"></i>
+          <div>
+            <div class="font-bold text-sm" id="insurance-text">Insurance</div>
+            <div class="text-xs text-casino-muted" id="insurance-detail"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+</div>
+
+<!-- Rules Config -->
+<section class="bg-casino-panel border border-casino-border rounded-xl p-4 mb-6">
+  <h2 class="font-display text-lg text-gold mb-3">Game Rules</h2>
+  <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+    <div>
+      <label class="text-[10px] text-casino-muted uppercase tracking-widest mb-1 block">Decks</label>
+      <select id="cfg-decks" onchange="onRulesChange()" class="w-full bg-casino-dark border border-casino-border rounded-lg px-3 py-2 text-sm text-casino-cream focus:outline-none focus:border-gold/50 appearance-none cursor-pointer">
+        <option value="1">1 Deck</option><option value="2">2 Decks</option><option value="4">4 Decks</option>
+        <option value="6" selected>6 Decks</option><option value="8">8 Decks</option>
+      </select>
+    </div>
+    <div>
+      <label class="text-[10px] text-casino-muted uppercase tracking-widest mb-1 block">Soft 17</label>
+      <select id="cfg-s17" onchange="onRulesChange()" class="w-full bg-casino-dark border border-casino-border rounded-lg px-3 py-2 text-sm text-casino-cream focus:outline-none focus:border-gold/50 appearance-none cursor-pointer">
+        <option value="1" selected>Dealer Stands</option><option value="0">Dealer Hits</option>
+      </select>
+    </div>
+    <div>
+      <label class="text-[10px] text-casino-muted uppercase tracking-widest mb-1 block">Double After Split</label>
+      <select id="cfg-das" onchange="onRulesChange()" class="w-full bg-casino-dark border border-casino-border rounded-lg px-3 py-2 text-sm text-casino-cream focus:outline-none focus:border-gold/50 appearance-none cursor-pointer">
+        <option value="1" selected>Allowed</option><option value="0">Not Allowed</option>
+      </select>
+    </div>
+    <div>
+      <label class="text-[10px] text-casino-muted uppercase tracking-widest mb-1 block">Surrender</label>
+      <select id="cfg-sur" onchange="onRulesChange()" class="w-full bg-casino-dark border border-casino-border rounded-lg px-3 py-2 text-sm text-casino-cream focus:outline-none focus:border-gold/50 appearance-none cursor-pointer">
+        <option value="1" selected>Late Surrender</option><option value="0">No Surrender</option>
+      </select>
+    </div>
+    <div>
+      <label class="text-[10px] text-casino-muted uppercase tracking-widest mb-1 block">Bankroll ($)</label>
+      <input type="number" id="cfg-bankroll" value="1000" min="100" step="100" onchange="onRulesChange()"
+        class="w-full bg-casino-dark border border-casino-border rounded-lg px-3 py-2 text-sm text-casino-cream focus:outline-none focus:border-gold/50 tabular-nums">
+    </div>
+  </div>
+</section>
+
+<!-- Strategy Chart -->
+<section class="bg-casino-panel border border-casino-border rounded-xl overflow-hidden mb-8">
+  <button onclick="toggleChart()" class="w-full flex items-center justify-between p-4 text-left hover:bg-casino-dark/50 transition-colors" id="chart-toggle">
+    <h2 class="font-display text-lg text-gold">Basic Strategy Reference Chart</h2>
+    <i class="fa-solid fa-chevron-down text-casino-muted transition-transform" id="chart-arrow"></i>
+  </button>
+  <div class="hidden px-4 pb-4 overflow-x-auto" id="chart-body">
+    <div class="text-[10px] text-casino-muted mb-2 flex gap-4 flex-wrap">
+      <span><span class="inline-block w-3 h-3 rounded bg-red-400/80 align-middle mr-1"></span>Hit</span>
+      <span><span class="inline-block w-3 h-3 rounded bg-blue-400/80 align-middle mr-1"></span>Stand</span>
+      <span><span class="inline-block w-3 h-3 rounded bg-yellow-400/80 align-middle mr-1"></span>Double</span>
+      <span><span class="inline-block w-3 h-3 rounded bg-emerald-400/80 align-middle mr-1"></span>Split</span>
+      <span><span class="inline-block w-3 h-3 rounded bg-orange-400/80 align-middle mr-1"></span>Surrender</span>
+      <span><span class="inline-block w-3 h-3 rounded bg-purple-400/80 align-middle mr-1"></span>Insurance</span>
+    </div>
+    <div id="strategy-charts" class="space-y-4"></div>
+  </div>
+</section>
+
+<footer class="text-center text-[10px] text-casino-muted/30 pb-4">
+  For educational purposes only. Card counting is legal but casinos may refuse service.
+</footer>
+</div>
+
+<script>
+/* ========================================
+   ACTION CONSTANTS
+======================================== */
+const HIT=0,STAND=1,DOUBLE=2,SPLIT=3,SURRENDER=4,Dh=5,Ds=6,Rh=7,Rs=8,Ph=9,Rp=10;
+const ACTION_NAMES=['HIT','STAND','DOUBLE','SPLIT','SURRENDER','Dbl/Hit','Dbl/Stand','Sur/Hit','Sur/Stand','Spl/Hit','Spl/Sur'];
+const ACTION_SHORT=['H','S','D','P','R','Dh','Ds','Rh','Rs','Ph','Rp'];
+const ACTION_CSS=['bg-red-400/80 text-casino-black','bg-blue-400/80 text-casino-black','bg-yellow-400/80 text-casino-black','bg-emerald-400/80 text-casino-black','bg-orange-400/80 text-casino-black','bg-yellow-400/80 text-casino-black','bg-yellow-400/80 text-casino-black','bg-orange-400/80 text-casino-black','bg-orange-400/80 text-casino-black','bg-emerald-400/80 text-casino-black','bg-orange-400/80 text-casino-black'];
+
+/* ========================================
+   BASIC STRATEGY TABLES (S17, DAS, LS)
+   Index: dealer 2=0,3=1,4=2,5=3,6=4,7=5,8=6,9=7,10=8,A=9
+======================================== */
+const HARD=[
+  null,null,null,null,
+  [HIT,HIT,HIT,HIT,HIT,HIT,HIT,HIT,HIT,HIT],//4
+  [HIT,HIT,HIT,HIT,HIT,HIT,HIT,HIT,HIT,HIT],//5
+  [HIT,HIT,HIT,HIT,HIT,HIT,HIT,HIT,HIT,HIT],//6
+  [HIT,HIT,HIT,HIT,HIT,HIT,HIT,HIT,HIT,HIT],//7
+  [HIT,HIT,HIT,HIT,HIT,HIT,HIT,HIT,HIT,HIT],//8
+  [HIT,Dh,Dh,Dh,Dh,HIT,HIT,HIT,HIT,HIT],//9
+  [Dh,Dh,Dh,Dh,Dh,Dh,Dh,Dh,HIT,HIT],//10
+  [Dh,Dh,Dh,Dh,Dh,Dh,Dh,Dh,Dh,Dh],//11
+  [HIT,HIT,STAND,STAND,STAND,HIT,HIT,HIT,HIT,HIT],//12
+  [STAND,STAND,STAND,STAND,STAND,HIT,HIT,HIT,HIT,HIT],//13
+  [STAND,STAND,STAND,STAND,STAND,HIT,HIT,HIT,HIT,HIT],//14
+  [STAND,STAND,STAND,STAND,STAND,HIT,HIT,Rh,Rh,Rh],//15
+  [STAND,STAND,STAND,STAND,STAND,HIT,Rh,Rh,Rh,Rh],//16
+  [STAND,STAND,STAND,STAND,STAND,STAND,STAND,STAND,STAND,Rs],//17
+  [STAND,STAND,STAND,STAND,STAND,STAND,STAND,STAND,STAND,STAND],//18
+  [STAND,STAND,STAND,STAND,STAND,STAND,STAND,STAND,STAND,STAND],//19
+  [STAND,STAND,STAND,STAND,STAND,STAND,STAND,STAND,STAND,STAND],//20
+  [STAND,STAND,STAND,STAND,STAND,STAND,STAND,STAND,STAND,STAND],//21
+];
+
+const SOFT=[
+  null,null,null,null,null,null,null,null,null,null,null,null,null,
+  [HIT,HIT,HIT,Dh,Dh,HIT,HIT,HIT,HIT,HIT],//13 A,2
+  [HIT,HIT,HIT,Dh,Dh,HIT,HIT,HIT,HIT,HIT],//14 A,3
+  [HIT,HIT,Dh,Dh,Dh,HIT,HIT,HIT,HIT,HIT],//15 A,4
+  [HIT,HIT,Dh,Dh,Dh,HIT,HIT,HIT,HIT,HIT],//16 A,5
+  [HIT,Dh,Dh,Dh,Dh,HIT,HIT,HIT,HIT,HIT],//17 A,6
+  [STAND,Ds,Ds,Ds,Ds,STAND,STAND,HIT,HIT,HIT],//18 A,7
+  [STAND,STAND,STAND,STAND,STAND,STAND,STAND,STAND,STAND,STAND],//19 A,8
+  [STAND,STAND,STAND,STAND,STAND,STAND,STAND,STAND,STAND,STAND],//20 A,9
+  [STAND,STAND,STAND,STAND,STAND,STAND,STAND,STAND,STAND,STAND],//21 A,10
+];
+
+// Pair rank: 2-10, 11=Ace
+const PAIR=[
+  null,null,
+  [Ph,Ph,SPLIT,SPLIT,SPLIT,SPLIT,HIT,HIT,HIT,HIT],//2
+  [Ph,Ph,SPLIT,SPLIT,SPLIT,SPLIT,SPLIT,HIT,HIT,HIT],//3
+  [HIT,HIT,HIT,Ph,Ph,HIT,HIT,HIT,HIT,HIT],//4
+  [DOUBLE,DOUBLE,DOUBLE,DOUBLE,DOUBLE,DOUBLE,DOUBLE,DOUBLE,HIT,HIT],//5
+  [Ph,SPLIT,SPLIT,SPLIT,SPLIT,SPLIT,HIT,HIT,HIT,HIT],//6
+  [SPLIT,SPLIT,SPLIT,SPLIT,SPLIT,SPLIT,SPLIT,SPLIT,HIT,HIT],//7
+  [SPLIT,SPLIT,SPLIT,SPLIT,SPLIT,SPLIT,SPLIT,SPLIT,SPLIT,SPLIT],//8
+  [SPLIT,SPLIT,SPLIT,SPLIT,SPLIT,STAND,SPLIT,SPLIT,STAND,STAND],//9
+  [STAND,STAND,STAND,STAND,STAND,STAND,STAND,STAND,STAND,STAND],//10
+  [SPLIT,SPLIT,SPLIT,SPLIT,SPLIT,SPLIT,SPLIT,SPLIT,SPLIT,SPLIT],//11 A,A
+];
+
+/* ========================================
+   ILLUSTRIOUS 18 + FAB 4 DEVIATIONS
+======================================== */
+const DEVIATIONS=[
+  {type:'hard',total:16,dealer:10,minTC:0,action:STAND,basic:Rh,desc:'Stand 16 vs 10 at TC≥0'},
+  {type:'hard',total:15,dealer:10,minTC:4,action:STAND,basic:Rh,desc:'Stand 15 vs 10 at TC≥4'},
+  {type:'hard',total:12,dealer:2,minTC:3,action:STAND,basic:HIT,desc:'Stand 12 vs 2 at TC≥3'},
+  {type:'hard',total:12,dealer:3,minTC:2,action:STAND,basic:HIT,desc:'Stand 12 vs 3 at TC≥2'},
+  {type:'hard',total:10,dealer:10,minTC:4,action:DOUBLE,basic:HIT,desc:'Double 10 vs 10 at TC≥4'},
+  {type:'hard',total:10,dealer:1,minTC:4,action:DOUBLE,basic:HIT,desc:'Double 10 vs Ace at TC≥4'},
+  {type:'hard',total:9,dealer:2,minTC:1,action:DOUBLE,basic:HIT,desc:'Double 9 vs 2 at TC≥1'},
+  {type:'hard',total:9,dealer:7,minTC:3,action:DOUBLE,basic:HIT,desc:'Double 9 vs 7 at TC≥3'},
+  {type:'hard',total:16,dealer:9,minTC:5,action:STAND,basic:HIT,desc:'Stand 16 vs 9 at TC≥5'},
+  {type:'soft',total:19,dealer:5,minTC:1,action:DOUBLE,basic:STAND,desc:'Double A,8 vs 5 at TC≥1'},
+  {type:'soft',total:19,dealer:6,minTC:1,action:DOUBLE,basic:STAND,desc:'Double A,8 vs 6 at TC≥1'},
+  {type:'hard',total:14,dealer:10,minTC:3,action:SURRENDER,basic:HIT,desc:'Surrender 14 vs 10 at TC≥3 (Fab 4)'},
+  {type:'hard',total:15,dealer:9,minTC:2,action:SURRENDER,basic:HIT,desc:'Surrender 15 vs 9 at TC≥2 (Fab 4)'},
+];
+
+/* ========================================
+   STATE
+======================================== */
+let settings={numDecks:6,s17:true,das:true,surrender:true,bankroll:1000};
+let seenCards=new Array(14).fill(0); // index 1-13
+let cardHistory=[]; // for undo
+let selectedSlot=null; // 'p1','p2','d'
+let playerCards=[null,null]; // rank values 1-13
+let dealerCard=null;
+let advisorMode='card';
+
+/* ========================================
+   UTILITY FUNCTIONS
+======================================== */
+const RANK_NAME=r=>r===1?'A':r<=10?String(r):r===11?'J':r===12?'Q':'K';
+const RANK_SYMBOLS=['','A','2','3','4','5','6','7','8','9','10','J','Q','K'];
+const HI_LO=r=>(r>=2&&r<=6)?1:(r===1||r>=10)?-1:0;
+const CARD_VALUE=r=>r===1?11:r>=10?10:r;
+const DEALER_IDX=r=>r===1?9:r>=10?8:r-2;
+
+function handTotal(cards){
+  let t=0,a=0;
+  for(const c of cards){if(c===1){a++;t+=11}else{t+=c>=10?10:c}}
+  while(t>21&&a>0){t-=10;a--}
+  return t;
+}
+function isSoft(cards){
+  let t=0,a=0;
+  for(const c of cards){if(c===1){a++;t+=11}else{t+=c>=10?10:c}}
+  while(t>21&&a>0){t-=10;a--}
+  return a>0;
+}
+function remaining(r){return settings.numDecks*4-seenCards[r]}
+function totalRemaining(){let s=0;for(let r=1;r<=13;r++)s+=remaining(r);return s}
+function decksRemaining(){return totalRemaining()/52}
+function runningCount(){let c=0;for(let r=1;r<=13;r++)c+=HI_LO(r)*seenCards[r];return c}
+function trueCount(){const d=decksRemaining();return d>0.5?runningCount()/d:runningCount()}
+function penetration(){return 1-totalRemaining()/(settings.numDecks*52)}
+function playerEdge(){return -0.45+trueCount()*0.53} // approx for 6-deck S17 DAS
+
+function resolveAction(a){
+  switch(a){
+    case Dh:return settings.surrender&&false?SURRENDER:settings.das?DOUBLE:HIT;
+    case Ds:return settings.das?DOUBLE:STAND;
+    case Rh:return settings.surrender?SURRENDER:HIT;
+    case Rs:return settings.surrender?SURRENDER:STAND;
+    case Ph:return settings.das?SPLIT:HIT;
+    case Rp:return settings.surrender?SURRENDER:SPLIT;
+    default:return a;
+  }
+}
+
+function getBasicStrategy(total,soft,isPair,pairRank,dealerUpcard){
+  const di=DEALER_IDX(dealerUpcard);
+  if(isPair&&pairRank!==undefined){
+    const pr=pairRank===1?11:pairRank;
+    const a=PAIR[pr]?.[di];
+    if(a!==undefined)return resolveAction(a);
+  }
+  if(soft){
+    const a=SOFT[total]?.[di];
+    if(a!==undefined)return resolveAction(a);
+  }
+  const a=HARD[total]?.[di];
+  return resolveAction(a??HIT);
+}
+
+function checkDeviation(total,soft,isPair,pairRank,dealerUpcard,tc){
+  for(const d of DEVIATIONS){
+    if(d.type==='hard'&&!soft&&total===d.total&&dealerUpcard===d.dealer&&tc>=d.minTC){
+      return d;
+    }
+    if(d.type==='soft'&&soft&&total===d.total&&dealerUpcard===d.dealer&&tc>=d.minTC){
+      return d;
+    }
+  }
+  return null;
+}
+
+/* ========================================
+   MONTE CARLO SIMULATOR
+======================================== */
+function buildDeck(excludeCards){
+  const deck=[];
+  const excl={};
+  for(const c of excludeCards){excl[c]=(excl[c]||0)+1}
+  for(let r=1;r<=13;r++){
+    let rem=remaining(r)-(excl[r]||0);
+    for(let i=0;i<rem;i++)deck.push(r);
+  }
+  return deck;
+}
+
+function partialShuffle(deck,n){
+  const len=deck.length;
+  for(let i=0;i<n&&i<len;i++){
+    const j=i+Math.floor(Math.random()*(len-i));
+    const tmp=deck[i];deck[i]=deck[j];deck[j]=tmp;
+  }
+}
+
+function simPlayPlayer(pCards,dealerUpcard,forcedAction,deck,idx){
+  const hand=[...pCards];
+  let t=handTotal(hand);
+  let s=isSoft(hand);
+  let canDbl=hand.length===2;
+  let doubled=false;
+
+  if(forcedAction===STAND){/* do nothing */}
+  else if(forcedAction===SURRENDER){return{hand,total:t,bust:false,doubled:false,surrendered:true}}
+  else if(forcedAction===DOUBLE&&canDbl){
+    hand.push(deck[idx++]);t=handTotal(hand);doubled=true;
+  } else if(forcedAction===HIT||(forcedAction===DOUBLE&&!canDbl)){
+    // Hit at least once, then follow basic strategy
+    do{
+      hand.push(deck[idx++]);t=handTotal(hand);s=isSoft(hand);
+      if(t>21||t===21)break;
+      canDbl=false;
+    }while(getBasicStrategy(handTotal(hand),isSoft(hand),false,undefined,dealerUpcard)===HIT);
+  }
+  return{hand,total:t,bust:t>21,doubled,surrendered:false};
+}
+
+function simPlayDealer(dUpcard,deck,idx){
+  const hand=[dUpcard,deck[idx++]];
+  let t=handTotal(hand);let s=isSoft(hand);
+  while(t<17||(settings.s17&&s&&t===17)){
+    hand.push(deck[idx++]);t=handTotal(hand);s=isSoft(hand);
+  }
+  return{hand,total:t,bust:t>21,bj:hand.length===2&&t===21};
+}
+
+function simulateAction(pCards,dealerUpcard,action,numSims){
+  const exclude=[...pCards,dealerUpcard];
+  const deck=buildDeck(exclude);
+  if(deck.length<15)return null;
+  let units=0,wins=0,losses=0,pushes=0;
+  const need=20;
+
+  for(let sim=0;sim<numSims;sim++){
+    partialShuffle(deck,need);
+    let idx=0;
+    const p=simPlayPlayer(pCards,dealerUpcard,action,deck,idx);
+    idx+=p.hand.length-pCards.length;
+    if(p.surrendered){units-=0.5;losses++;continue}
+    const d=simPlayDealer(dealerUpcard,deck,idx);
+    idx+=d.hand.length-1;
+    const pBJ=pCards.length===2&&handTotal(pCards)===21&&!p.doubled;
+    const stake=p.doubled?2:1;
+    if(pBJ&&d.bj){pushes++}
+    else if(pBJ){wins++;units+=1.5}
+    else if(d.bj){losses++;units-=stake}
+    else if(p.bust){losses++;units-=stake}
+    else if(d.bust){wins++;units+=stake}
+    else if(p.total>d.total){wins++;units+=stake}
+    else if(p.total<d.total){losses++;units-=stake}
+    else{pushes++}
+  }
+  return{ev:units/numSims,winRate:wins/numSims,lossRate:losses/numSims,pushRate:pushes/numSims};
+}
+
+/* ========================================
+   CARD TRACKER UI
+======================================== */
+function renderCardGrid(){
+  const grid=document.getElementById('card-grid');
+  grid.innerHTML='';
+  for(let r=1;r<=13;r++){
+    const rem=remaining(r);
+    const tot=settings.numDecks*4;
+    const pct=tot>0?rem/tot:0;
+    const hilo=HI_LO(r);
+    const hiloColor=hilo>0?'text-emerald-400':hilo<0?'text-red-400':'text-gray-500';
+    const hiloBg=hilo>0?'bg-emerald-500':hilo<0?'bg-red-400':'bg-gray-500';
+    const disabled=rem<=0;
+
+    const el=document.createElement('div');
+    el.className=`card-rank bg-casino-dark border border-casino-border rounded-lg p-1.5 sm:p-2 text-center ${disabled?'disabled':''}`;
+    el.innerHTML=`
+      <div class="text-base sm:text-lg font-bold leading-none mb-0.5">${RANK_NAME(r)}</div>
+      <div class="${hiloColor} text-[9px] font-bold mb-1">${hilo>0?'+':''}${hilo}</div>
+      <div class="text-[10px] tabular-nums text-casino-cream">${rem}<span class="text-casino-muted/50">/${tot}</span></div>
+      <div class="h-1 bg-gray-800 rounded-full mt-1 overflow-hidden">
+        <div class="fill-bar h-full ${hiloBg} rounded-full" style="width:${pct*100}%"></div>
+      </div>
+    `;
+    el.addEventListener('click',e=>{e.preventDefault();addSeen(r)});
+    el.addEventListener('contextmenu',e=>{e.preventDefault();removeSeen(r)});
+    grid.appendChild(el);
+  }
+}
+
+function addSeen(r){
+  if(remaining(r)<=0)return;
+  seenCards[r]++;
+  cardHistory.push(r);
+  updateAll();
+}
+function removeSeen(r){
+  if(seenCards[r]<=0)return;
+  seenCards[r]--;
+  cardHistory.push(-r);
+  updateAll();
+}
+function undoLast(){
+  if(cardHistory.length===0)return;
+  const last=cardHistory.pop();
+  if(last>0)seenCards[last]--;
+  else seenCards[-last]++;
+  updateAll();
+}
+function resetShoe(){
+  seenCards.fill(0);
+  cardHistory=[];
+  updateAll();
+}
+
+/* ========================================
+   HAND ADVISOR UI
+======================================== */
+function setMode(mode){
+  advisorMode=mode;
+  document.querySelectorAll('.tab-btn').forEach(b=>b.classList.toggle('active',b.dataset.mode===mode));
+  document.getElementById('card-mode').classList.toggle('hidden',mode!=='card');
+  document.getElementById('total-mode').classList.toggle('hidden',mode!=='total');
+}
+
+function renderCardPicker(){
+  const picker=document.getElementById('card-picker');
+  picker.innerHTML='';
+  picker.style.gridTemplateColumns='repeat(13,1fr)';
+  for(let r=1;r<=13;r++){
+    const btn=document.createElement('button');
+    btn.className='picker-btn w-full aspect-square bg-casino-dark border border-casino-border rounded-lg flex items-center justify-center text-xs sm:text-sm font-bold';
+    btn.textContent=RANK_NAME(r);
+    btn.dataset.rank=r;
+    btn.addEventListener('click',()=>pickCard(r));
+    picker.appendChild(btn);
+  }
+}
+
+function selectSlot(slot){
+  selectedSlot=slot;
+  document.querySelectorAll('.slot-card').forEach(el=>el.classList.remove('active'));
+  document.getElementById('slot-'+slot).classList.add('active');
+  updatePickerHighlight();
+}
+
+function pickCard(r){
+  if(!selectedSlot)return;
+  if(selectedSlot==='p1'){playerCards[0]=r;document.getElementById('slot-p1').textContent=RANK_NAME(r)}
+  else if(selectedSlot==='p2'){playerCards[1]=r;document.getElementById('slot-p2').textContent=RANK_NAME(r)}
+  else if(selectedSlot==='d'){dealerCard=r;document.getElementById('slot-d').textContent=RANK_NAME(r)}
+  updatePickerHighlight();
+}
+
+function updatePickerHighlight(){
+  document.querySelectorAll('.picker-btn').forEach(btn=>{
+    const r=parseInt(btn.dataset.rank);
+    const isP1=playerCards[0]===r;
+    const isP2=playerCards[1]===r;
+    const isD=dealerCard===r;
+    btn.classList.toggle('selected',selectedSlot==='p1'&&isP1||selectedSlot==='p2'&&isP2||selectedSlot==='d'&&isD);
+  });
+}
+
+function clearSlots(){
+  playerCards=[null,null];dealerCard=null;selectedSlot=null;
+  document.getElementById('slot-p1').textContent='?';
+  document.getElementById('slot-p2').textContent='?';
+  document.getElementById('slot-d').textContent='?';
+  document.querySelectorAll('.slot-card').forEach(el=>el.classList.remove('active'));
+  updatePickerHighlight();
+}
+
+/* ========================================
+   CALCULATE ADVICE
+======================================== */
+let calcTimeout=null;
+function calculateAdvice(){
+  clearTimeout(calcTimeout);
+  calcTimeout=setTimeout(_calculateAdvice,50);
+}
+
+function _calculateAdvice(){
+  let pCards,total,soft,isPair=false,pairRank,dealerUpcard;
+
+  if(advisorMode==='card'){
+    if(playerCards[0]===null||playerCards[1]===null||dealerCard===null){
+      showToast('Select all cards first');return;
+    }
+    pCards=[playerCards[0],playerCards[1]];
+    // Normalize 10-value cards for pair detection
+    const v1=playerCards[0]>=10?10:playerCards[0];
+    const v2=playerCards[1]>=10?10:playerCards[1];
+    isPair=v1===v2;
+    pairRank=v1;
+    total=handTotal(pCards);
+    soft=isSoft(pCards);
+    dealerUpcard=dealerCard;
+  } else {
+    total=parseInt(document.getElementById('total-input').value);
+    soft=document.getElementById('soft-check').checked;
+    dealerUpcard=parseInt(document.getElementById('dealer-select').value);
+    pCards=null; // no specific cards in total mode
+    isPair=false;pairRank=undefined;
+    if(isNaN(total)||total<4||total>21){showToast('Enter a valid total (4-21)');return}
+  }
+
+  const tc=trueCount();
+  const edge=playerEdge();
+
+  // Get basic strategy action
+  const basicAction=getBasicStrategy(total,soft,isPair,pairRank,dealerUpcard);
+
+  // Check for deviations
+  const deviation=checkDeviation(total,soft,isPair,pairRank,dealerUpcard,tc);
+  const finalAction=deviation?deviation.action:basicAction;
+
+  // Check insurance
+  const showInsurance=dealerUpcard===1;
+  const takeInsurance=tc>=3;
+
+  // Show results panel
+  document.getElementById('results-panel').classList.remove('hidden');
+
+  // Main recommendation
+  const recEl=document.getElementById('rec-action');
+  const recCard=document.getElementById('rec-card');
+  recEl.textContent=ACTION_NAMES[finalAction];
+  recEl.className='text-4xl sm:text-5xl font-black mb-1 action-badge '+getActionTextClass(finalAction);
+  recCard.className='bg-casino-panel border-2 rounded-xl p-5 text-center '+(finalAction===STAND||finalAction===DOUBLE||finalAction===SPLIT?'glow-green':'glow-red');
+
+  // Run simulations for EV
+  const simCards=pCards||generateCardsForTotal(total,soft);
+  const numSims=4000;
+  let simResults=null;
+  let comparisonData=[];
+
+  // Simulate the recommended action (skip split for sim)
+  if(finalAction!==SPLIT){
+    simResults=simulateAction(simCards,dealerUpcard,finalAction,numSims);
+  }
+
+  // Simulate other actions for comparison
+  const validActions=[HIT,STAND];
+  if(simCards.length===2)validActions.push(DOUBLE);
+  if(isPair&&simCards.length===2)validActions.push(SPLIT);
+  if(settings.surrender)validActions.push(SURRENDER);
+
+  for(const act of validActions){
+    if(act===SPLIT){
+      comparisonData.push({action:SPLIT,ev:null,winRate:null,lossRate:null,pushRate:null});
+      continue;
+    }
+    const res=simulateAction(simCards,dealerUpcard,act,numSims);
+    if(res)comparisonData.push({action:act,...res});
+  }
+
+  // Display EV
+  let evText;
+  if(finalAction===SPLIT){
+    evText='EV: Higher than alternatives (split simulation complex)';
+    document.getElementById('rec-ev').textContent=evText;
+  } else if(simResults){
+    document.getElementById('rec-ev').textContent=`EV: ${(simResults.ev*100).toFixed(2)}%`;
+  }
+
+  // Probabilities
+  if(simResults){
+    document.getElementById('prob-win').textContent=(simResults.winRate*100).toFixed(1)+'%';
+    document.getElementById('prob-lose').textContent=(simResults.lossRate*100).toFixed(1)+'%';
+    document.getElementById('prob-push').textContent=(simResults.pushRate*100).toFixed(1)+'%';
+    document.getElementById('bar-win').style.width=(simResults.winRate*100)+'%';
+    document.getElementById('bar-lose').style.width=(simResults.lossRate*100)+'%';
+    document.getElementById('bar-push').style.width=(simResults.pushRate*100)+'%';
+    document.getElementById('sim-info').textContent=`Based on ${numSims} Monte Carlo simulations with current deck composition`;
+  } else {
+    document.getElementById('prob-win').textContent='—';
+    document.getElementById('prob-lose').textContent='—';
+    document.getElementById('prob-push').textContent='—';
+    document.getElementById('bar-win').style.width='0%';
+    document.getElementById('bar-lose').style.width='0%';
+    document.getElementById('bar-push').style.width='0%';
+    document.getElementById('sim-info').textContent='Split probability requires complex multi-hand simulation';
+  }
+
+  // Action comparison
+  const compEl=document.getElementById('ev-comparison');
+  compEl.innerHTML='';
+  // Sort by EV descending
+  const sorted=[...comparisonData].sort((a,b)=>(b.ev||0)-(a.ev||0));
+  for(const item of sorted){
+    const isRec=item.action===finalAction;
+    const evStr=item.ev!==null?(item.ev*100).toFixed(2)+'%':'N/A';
+    const barW=item.ev!==null?Math.min(Math.max((item.ev+0.5)*50,2),100):0;
+    const barColor=item.ev>0?'bg-emerald-500':item.ev<0?'bg-red-500':'bg-gray-500';
+    const div=document.createElement('div');
+    div.className=`flex items-center gap-2 ${isRec?'':'opacity-60'}`;
+    div.innerHTML=`
+      <div class="w-10 text-xs font-bold ${getActionTextClass(item.action)}">${ACTION_SHORT[item.action]}</div>
+      <div class="flex-1 h-2.5 bg-gray-800 rounded-full overflow-hidden">
+        <div class="h-full ${barColor} rounded-full transition-all duration-500" style="width:${barW}%"></div>
+      </div>
+      <div class="w-16 text-right text-xs tabular-nums font-mono ${item.ev>0?'text-emerald-400':item.ev<0?'text-red-400':'text-gray-400'}">${evStr}</div>
+      ${isRec?'<i class="fa-solid fa-check text-gold text-xs w-4"></i>':'<div class="w-4"></div>'}
+    `;
+    compEl.appendChild(div);
+  }
+
+  // Deviation alert
+  const devEl=document.getElementById('deviation-alert');
+  if(deviation){
+    devEl.classList.remove('hidden');
+    document.getElementById('deviation-text').textContent=
+      `${deviation.desc} — Basic strategy says ${ACTION_NAMES[deviation.basic]}, but at TC ${tc.toFixed(1)}, ${ACTION_NAMES[deviation.action]} is optimal.`;
+  } else {
+    devEl.classList.add('hidden');
+  }
+
+  // Bet sizing
+  const kelly=edge/1.26; // variance ~1.26 for blackjack
+  const bankroll=settings.bankroll;
+  document.getElementById('bet-quarter').textContent='$'+Math.max(0,Math.round(kelly*0.25*bankroll));
+  document.getElementById('bet-half').textContent='$'+Math.max(0,Math.round(kelly*0.5*bankroll));
+  document.getElementById('bet-full').textContent='$'+Math.max(0,Math.round(kelly*bankroll));
+
+  // Insurance
+  const insEl=document.getElementById('insurance-panel');
+  if(showInsurance){
+    insEl.classList.remove('hidden');
+    const insIcon=document.getElementById('insurance-icon');
+    const insText=document.getElementById('insurance-text');
+    const insDetail=document.getElementById('insurance-detail');
+    if(takeInsurance){
+      insIcon.className='fa-solid fa-shield-halved text-lg text-emerald-400';
+      insText.textContent='Take Insurance';
+      insText.className='font-bold text-sm text-emerald-400';
+      insDetail.textContent=`True count ${tc.toFixed(1)} ≥ 3.0 — Positive EV insurance bet.`;
+    } else {
+      insIcon.className='fa-solid fa-shield-halved text-lg text-red-400';
+      insText.textContent='Decline Insurance';
+      insText.className='font-bold text-sm text-red-400';
+      insDetail.textContent=`True count ${tc.toFixed(1)} < 3.0 — Negative EV insurance bet.`;
+    }
+  } else {
+    insEl.classList.add('hidden');
+  }
+}
+
+function generateCardsForTotal(total,soft){
+  // Generate a plausible 2-card hand for the given total
+  if(soft){
+    const other=total-11; // Ace = 11, other card makes up the rest
+    return[1, other>=10?10:other];
+  }
+  // Hard total - generate two cards that sum to total
+  // Simple: use total-10 and 10 for totals >= 12, otherwise total-2 and 2
+  if(total>=12){
+    const first=Math.min(total-10,10);
+    return[first>=10?10:first, 10];
+  }
+  return[Math.max(total-2,2), 2];
+}
+
+function getActionTextClass(action){
+  switch(action){
+    case HIT:return 'text-red-400';
+    case STAND:return 'text-blue-400';
+    case DOUBLE:return 'text-yellow-400';
+    case SPLIT:return 'text-emerald-400';
+    case SURRENDER:return 'text-orange-400';
+    default:return 'text-casino-cream';
+  }
+}
+
+/* ========================================
+   DASHBOARD UPDATE
+======================================== */
+function updateDashboard(){
+  const rc=runningCount();
+  const tc=trueCount();
+  const dr=decksRemaining();
+  const pen=penetration();
+  const edge=playerEdge();
+
+  const rcEl=document.getElementById('rc-display');
+  rcEl.textContent=(rc>0?'+':'')+rc;
+  rcEl.className='text-2xl sm:text-3xl font-bold tabular-nums '+(rc>0?'text-emerald-400':rc<0?'text-red-400':'text-casino-cream');
+
+  const tcEl=document.getElementById('tc-display');
+  tcEl.textContent=(tc>0?'+':'')+tc.toFixed(1);
+  tcEl.className='text-2xl sm:text-3xl font-bold tabular-nums '+(tc>0?'text-emerald-400':tc<0?'text-red-400':'text-casino-cream');
+
+  document.getElementById('dr-display').textContent=dr.toFixed(1);
+  document.getElementById('pen-display').textContent=(pen*100).toFixed(0)+'%';
+  document.getElementById('pen-bar').style.width=(pen*100)+'%';
+
+  const edgeStr=(edge>0?'+':'')+edge.toFixed(2)+'%';
+  const edgeEl=document.getElementById('edge-display');
+  edgeEl.textContent=edgeStr;
+  edgeEl.className='text-2xl sm:text-3xl font-bold tabular-nums '+(edge>0?'text-emerald-400':edge<0?'text-red-400':'text-casino-cream');
+
+  // Edge bar
+  const bar=document.getElementById('edge-bar');
+  const clampedEdge=Math.max(-2,Math.min(2,edge));
+  const scale=25; // 1% = 25% of bar
+  if(clampedEdge>=0){
+    bar.style.left='50%';
+    bar.style.width=(clampedEdge*scale)+'%';
+    bar.style.background='#4ade80';
+  } else {
+    bar.style.left=(50+clampedEdge*scale)+'%';
+    bar.style.width=(-clampedEdge*scale)+'%';
+    bar.style.background='#f87171';
+  }
+}
+
+function updateAll(){
+  renderCardGrid();
+  updateDashboard();
+}
+
+/* ========================================
+   RULES
+======================================== */
+function onRulesChange(){
+  settings.numDecks=parseInt(document.getElementById('cfg-decks').value);
+  settings.s17=document.getElementById('cfg-s17').value==='1';
+  settings.das=document.getElementById('cfg-das').value==='1';
+  settings.surrender=document.getElementById('cfg-sur').value==='1';
+  settings.bankroll=Math.max(100,parseInt(document.getElementById('cfg-bankroll').value)||1000);
+  document.getElementById('bankroll-display').textContent=settings.bankroll;
+  // Clamp seen cards to new deck size
+  for(let r=1;r<=13;r++){
+    const max=settings.numDecks*4;
+    if(seenCards[r]>max)seenCards[r]=max;
+  }
+  updateAll();
+  renderStrategyChart();
+}
+
+/* ========================================
+   STRATEGY CHART
+======================================== */
+function toggleChart(){
+  const body=document.getElementById('chart-body');
+  const arrow=document.getElementById('chart-arrow');
+  body.classList.toggle('hidden');
+  arrow.style.transform=body.classList.contains('hidden')?'':'rotate(180deg)';
+}
+
+function renderStrategyChart(){
+  const container=document.getElementById('strategy-charts');
+  const dealers=['2','3','4','5','6','7','8','9','10','A'];
+  let html='';
+
+  // Hard totals
+  html+='<div><div class="text-xs font-bold text-casino-muted mb-1">Hard Totals</div><table class="charts-grid w-full"><tr><th class="!text-left !pl-2">Total</th>';
+  for(const d of dealers)html+=`<th>${d}</th>`;
+  html+='</tr>';
+  for(let t=4;t<=21;t++){
+    html+=`<tr><td class="!text-left !pl-2 font-bold">${t}</td>`;
+    for(let di=0;di<10;di++){
+      const a=resolveAction(HARD[t][di]);
+      html+=`<td class="${ACTION_CSS[a]} rounded font-bold text-[11px]">${ACTION_SHORT[a]}</td>`;
+    }
+    html+='</tr>';
+  }
+  html+='</table></div>';
+
+  // Soft totals
+  html+='<div><div class="text-xs font-bold text-casino-muted mb-1">Soft Totals</div><table class="charts-grid w-full"><tr><th class="!text-left !pl-2">Hand</th>';
+  for(const d of dealers)html+=`<th>${d}</th>`;
+  html+='</tr>';
+  const softLabels=['','A,2','A,3','A,4','A,5','A,6','A,7','A,8','A,9','A,10'];
+  for(let t=13;t<=21;t++){
+    html+=`<tr><td class="!text-left !pl-2 font-bold">${softLabels[t-12]||t}</td>`;
+    for(let di=0;di<10;di++){
+      const a=resolveAction(SOFT[t][di]);
+      html+=`<td class="${ACTION_CSS[a]} rounded font-bold text-[11px]">${ACTION_SHORT[a]}</td>`;
+    }
+    html+='</tr>';
+  }
+  html+='</table></div>';
+
+  // Pairs
+  html+='<div><div class="text-xs font-bold text-casino-muted mb-1">Pairs</div><table class="charts-grid w-full"><tr><th class="!text-left !pl-2">Pair</th>';
+  for(const d of dealers)html+=`<th>${d}</th>`;
+  html+='</tr>';
+  const pairLabels=['','','2,2','3,3','4,4','5,5','6,6','7,7','8,8','9,9','10,10','A,A'];
+  for(let pr=2;pr<=11;pr++){
+    html+=`<tr><td class="!text-left !pl-2 font-bold">${pairLabels[pr]}</td>`;
+    for(let di=0;di<10;di++){
+      const a=resolveAction(PAIR[pr][di]);
+      html+=`<td class="${ACTION_CSS[a]} rounded font-bold text-[11px]">${ACTION_SHORT[a]}</td>`;
+    }
+    html+='</tr>';
+  }
+  html+='</table></div>';
+
+  container.innerHTML=html;
+}
+
+/* ========================================
+   TOAST NOTIFICATION
+======================================== */
+function showToast(msg){
+  let toast=document.getElementById('toast');
+  if(!toast){
+    toast=document.createElement('div');
+    toast.id='toast';
+    toast.className='fixed bottom-6 left-1/2 -translate-x-1/2 bg-casino-dark border border-gold/30 text-casino-cream px-5 py-3 rounded-xl text-sm shadow-2xl z-50 transition-all duration-300 opacity-0 translate-y-4 pointer-events-none';
+    document.body.appendChild(toast);
+  }
+  toast.textContent=msg;
+  toast.classList.remove('opacity-0','translate-y-4');
+  toast.classList.add('opacity-100','translate-y-0');
+  clearTimeout(toast._timer);
+  toast._timer=setTimeout(()=>{
+    toast.classList.add('opacity-0','translate-y-4');
+    toast.classList.remove('opacity-100','translate-y-0');
+  },2000);
+}
+
+/* ========================================
+   QUICK INPUT HANDLER
+======================================== */
+document.addEventListener('DOMContentLoaded',()=>{
+  const input=document.getElementById('quick-input');
+  input.addEventListener('keydown',e=>{
+    if(e.key==='Enter'){
+      e.preventDefault();
+      const text=input.value.toUpperCase().replace(/[^A2-9TJQK]/g,'');
+      if(!text)return;
+      for(const ch of text){
+        let r=null;
+        if(ch==='A')r=1;
+        else if(ch>='2'&&ch<='9')r=parseInt(ch);
+        else if(ch==='T')r=10;
+        else if(ch==='J')r=11;
+        else if(ch==='Q')r=12;
+        else if(ch==='K')r=13;
+        if(r!==null&&remaining(r)>0){
+          seenCards[r]++;
+          cardHistory.push(r);
+        }
+      }
+      input.value='';
+      updateAll();
+    }
+  });
+  // Also add on blur or paste
+  input.addEventListener('paste',e=>{
+    setTimeout(()=>{
+      input.dispatchEvent(new KeyboardEvent('keydown',{key:'Enter'}));
+    },50);
+  });
+});
+
+/* ========================================
+   KEYBOARD SHORTCUTS
+======================================== */
+document.addEventListener('keydown',e=>{
+  if(e.target.tagName==='INPUT'||e.target.tagName==='SELECT')return;
+  if(e.key==='z'&&(e.ctrlKey||e.metaKey)){e.preventDefault();undoLast()}
+  if(e.key==='n'&&(e.ctrlKey||e.metaKey)){e.preventDefault();resetShoe()}
+});
+
+/* ========================================
+   INIT
+======================================== */
+function init(){
+  renderCardGrid();
+  renderCardPicker();
+  updateDashboard();
+  renderStrategyChart();
+  document.getElementById('bankroll-display').textContent=settings.bankroll;
+}
+init();
+</script>
+</body>
+</html>
